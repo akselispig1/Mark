@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { width: 280px; margin: 0; padding: 16px; background: #0c0a04; color: rgba(255,196,64,.85); font: 13px "Segoe UI", sans-serif; }
+  h1 { font-size: 11px; font-weight: 400; letter-spacing: .4em; margin: 0 0 12px; color: #ffc440; }
+  input { width: 100%; box-sizing: border-box; margin: 4px 0 8px; padding: 8px; background: #000; color: #ffd98a; border: 1px solid rgba(255,196,64,.25); border-radius: 7px; }
+  button { width: 100%; padding: 8px; background: none; color: #ffc440; border: 1px solid rgba(255,196,64,.4); border-radius: 7px; cursor: pointer; }
+  p { font-size: 11px; opacity: .6; line-height: 1.5; }
+  #status { font-size: 12px; margin-bottom: 10px; }
+</style>
+<h1>MARK AUTOFILL</h1>
+<div id="status">…</div>
+<label>Link code (from Mark's vault screen)<input id="token" type="password" autocomplete="off"></label>
+<label>Mark address<input id="url" placeholder="http://localhost:7777"></label>
+<button id="save">Link</button>
+<p>Mark fills logins only after you approve with Windows Hello, and only on the site the login belongs to. He never sees your passwords.</p>
+<script src="popup.js"></script>

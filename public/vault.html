@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault · MARK</title>
+<style>
+  :root { --gold: 255, 196, 64; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; padding: 26px 22px 40px; background: #07060200; background-color: #070602;
+    color: rgba(var(--gold), .85); font: 300 14px/1.6 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 11px; font-weight: 400; letter-spacing: .5em; color: rgb(var(--gold)); margin: 0 0 4px; }
+  h2 { font-size: 13px; font-weight: 400; letter-spacing: .12em; margin: 26px 0 10px; color: rgba(var(--gold), .9); }
+  p.note { font-size: 12px; opacity: .6; margin: 6px 0 14px; }
+  label { display: block; margin: 0 0 10px; }
+  label span { display: block; font-size: 11px; letter-spacing: .1em; opacity: .6; margin-bottom: 4px; }
+  input { width: 100%; padding: 11px 12px; background: rgba(0,0,0,.55); color: rgba(var(--gold), .95);
+    border: 1px solid rgba(var(--gold), .22); border-radius: 9px; font: inherit; outline: none; }
+  input:focus { border-color: rgba(var(--gold), .65); box-shadow: 0 0 0 3px rgba(var(--gold), .08); }
+  button { background: rgba(var(--gold), .08); border: 1px solid rgba(var(--gold), .35); color: rgba(var(--gold), .9);
+    border-radius: 9px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); }
+  button.primary { width: 100%; padding: 12px; margin-top: 6px; letter-spacing: .14em; }
+  button.danger { border-color: rgba(255,120,90,.45); color: rgba(255,150,120,.95); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row input { flex: 1; }
+  .msg { margin: 12px 0 0; font-size: 13px; min-height: 1.4em; }
+  .msg.bad { color: #ff9a7a; }
+  .msg.good { color: rgb(var(--gold)); }
+  #list { margin: 4px 0 18px; }
+  .login { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 2px;
+    border-bottom: 1px solid rgba(var(--gold), .1); }
+  .login b { font-weight: 400; }
+  .login small { display: block; opacity: .55; font-size: 12px; }
+  .login .who { flex: 1; min-width: 150px; }
+  .login code { flex-basis: 100%; font: 13px Consolas, monospace; color: #ffe2a0; word-break: break-all; }
+  .empty { opacity: .55; font-size: 13px; padding: 10px 0; }
+  .card { border: 1px solid rgba(var(--gold), .16); border-radius: 12px; padding: 14px 14px 6px; margin-bottom: 14px; background: rgba(255,196,64,.02); }
+  .status { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; font-size: 13px; }
+  .status b { font-weight: 400; color: rgb(var(--gold)); }
+  .code { font: 13px Consolas, monospace; background: rgba(var(--gold), .09); padding: 7px 9px; border-radius: 7px; user-select: all; word-break: break-all; }
+  .orb { width: 44px; height: 44px; border-radius: 50%; margin-bottom: 14px;
+    background: radial-gradient(circle, #fff3c4 0%, #ffc440 30%, rgba(184,106,0,.4) 62%, transparent 74%); box-shadow: 0 0 34px rgba(255,196,64,.3); }
+</style>
+</head>
+<body>
+<main>
+  <div class="orb"></div>
+  <h1>MARK VAULT</h1>
+  <p class="note" id="sub">Connecting…</p>
+
+  <!-- 1. First run: choose a master password -->
+  <section id="createView" hidden>
+    <h2>Create your vault</h2>
+    <p class="note">One master password protects everything. It never reaches Mark's AI, and it cannot be recovered if you forget it, so write it down somewhere safe.</p>
+    <label><span>MASTER PASSWORD (10+ CHARACTERS)</span><input id="newPass" type="password" autocomplete="new-password"></label>
+    <label><span>TYPE IT AGAIN</span><input id="newPass2" type="password" autocomplete="new-password"></label>
+    <button class="primary" id="createBtn">Create vault</button>
+  </section>
+
+  <!-- 2. Locked -->
+  <section id="unlockView" hidden>
+    <h2>Vault locked</h2>
+    <button class="primary" id="helloUnlockBtn" hidden style="margin-bottom:14px">Open with Windows Hello</button>
+    <label><span>MASTER PASSWORD</span><input id="unlockPass" type="password" autocomplete="current-password"></label>
+    <button class="primary" id="unlockBtn">Unlock</button>
+  </section>
+
+  <!-- 3. Unlocked -->
+  <section id="mainView" hidden>
+    <h2 id="listTitle">Your logins</h2>
+    <label><input id="search" placeholder="search" autocomplete="off"></label>
+    <div id="list"></div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Add or update a login</h2>
+      <label><span>NAME</span><input id="fName" placeholder="Netflix" autocomplete="off"></label>
+      <label><span>USERNAME OR EMAIL</span><input id="fUser" autocomplete="off"></label>
+      <label><span>WEBSITE (NEEDED FOR AUTOFILL)</span><input id="fUrl" placeholder="netflix.com" autocomplete="off"></label>
+      <label><span>PASSWORD</span></label>
+      <div class="row"><input id="fPass" type="password" autocomplete="new-password"><button id="genBtn">generate</button></div>
+      <label style="margin-top:10px"><span>2FA SETUP KEY (OPTIONAL)</span><input id="fTotp" placeholder="otpauth://… or the setup key" autocomplete="off"></label>
+      <button class="primary" id="saveBtn">Save login</button>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">Import your saved passwords</h2>
+      <p class="note">In Chrome: ⋮ → Passwords and autofill → Google Password Manager → Settings → Download file. Pick that file here; it's read on this PC only and never sent to Mark's AI. Delete the file afterwards. <b>Unlock the vault first</b> — this section only works once it's open.</p>
+      <div class="row"><input id="csvFile" type="file"><button id="importBtn">Import</button></div>
+      <p class="note" id="dropZone" style="border:1px dashed rgba(var(--gold),.3);border-radius:8px;padding:10px;text-align:center;margin-top:8px">
+        …or drag the exported file here. CSV or JSON, from Chrome, Edge, Safari, Bitwarden, 1Password, Proton or LastPass.</p>
+    </div>
+
+    <h2>Security</h2>
+    <div class="status"><span id="helloLabel">Windows Hello <b id="helloState">off</b></span><button id="helloBtn">Set up</button></div>
+    <div class="status"><span>Open the vault with it <b id="helloUnlockState">off</b></span><button id="helloUnlockSetBtn">Turn on</button></div>
+    <p class="note">With this on you never type the master password again — your face, fingerprint or PIN opens the vault.
+      The key is sealed by this PC's security chip, so the vault file is still worthless if it's copied off the machine.
+      Keep your master password somewhere safe: it stays the way back in if you change PC or remove your Hello sign-in.</p>
+    <div class="status"><span>Email codes (Gmail) <b id="gmailState">off</b></span><button id="gmailBtn">Connect</button></div>
+    <div id="gmailForm" class="card" hidden>
+      <label><span>GMAIL ADDRESS</span><input id="gUser" autocomplete="off" placeholder="you@gmail.com"></label>
+      <label><span>GOOGLE APP PASSWORD (16 LETTERS)</span><input id="gPass" type="password" autocomplete="off"></label>
+      <button class="primary" id="gConnect">Connect Gmail</button>
+      <p class="note">Create one at myaccount.google.com/apppasswords (needs 2-Step Verification). Mark only reads mail from the site you're signing in to, from the last ten minutes, and only takes the code.</p>
+    </div>
+    <div class="status"><span>Browser autofill <b id="extState">not linked</b></span><button id="extBtn">Get link code</button></div>
+    <div id="extCodeBox" hidden><p class="code" id="extCode"></p><p class="note">Paste this into the Mark Autofill extension (click its icon in Chrome). Shown once.</p></div>
+
+    <button class="primary danger" id="lockBtn" style="margin-top:18px">Lock vault</button>
+    <p class="note" id="autolockNote"></p>
+  </section>
+
+  <p class="msg" id="msg"></p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id, on) => ($(id).hidden = !on);
+let st = {}, items = [], ws, codeTimers = new Map();
+
+function say(text, bad) { $('msg').textContent = text || ''; $('msg').className = 'msg' + (text ? (bad ? ' bad' : ' good') : ''); }
+const send = (op, extra = {}) => ws?.readyState === 1 ? ws.send(JSON.stringify({ type: 'vault', op, ...extra })) : say('Not connected to Mark.', true);
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/orb`);
+  ws.onopen = () => { $('sub').textContent = 'Connected to Mark on this PC.'; send('status'); };
+  ws.onclose = () => { $('sub').textContent = 'Reconnecting…'; setTimeout(connect, 1200); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'secret') return copySecret(m);            // Mark asked to copy a password here
+    if (m.type !== 'vault') return;
+    if (m.status) { st = m.status; applyStatus(); }
+    if (m.items) { items = m.items; drawList(); }
+    if (m.error) say(m.error, true);
+    else if (m.note) say(m.note);
+    if (m.generated) { $('fPass').value = m.generated; $('fPass').type = 'text'; }
+    if (m.extCode) { $('extCode').textContent = m.extCode; show('extCodeBox', true); }
+    if (m.revealed) showSecret(m.revealed);
+    if (m.totp) showCode(m.totp);
+    if (m.helloOptions) setUpHello(m.helloOptions);
+    if (m.helloUnlock) helloAssert(m.helloUnlock)
+      .then((r) => send('hello_unlock', r))
+      .catch((e) => say(e.name === 'NotAllowedError' ? 'Cancelled.' : e.message, true));
+    if (m.helloUnlockSetup) helloAssert(m.helloUnlockSetup)
+      .then((r) => send('hello_unlock_enable', r))
+      .catch((e) => say(e.name === 'NotAllowedError' ? 'Cancelled.' : e.message, true));
+  };
+}
+
+function applyStatus() {
+  show('createView', !st.exists);
+  show('unlockView', st.exists && !(st.unlocked && st.authed));
+  show('mainView', !!(st.unlocked && st.authed));
+  $('helloState').textContent = st.hello ? 'on' : 'off';
+  $('helloBtn').hidden = !!st.hello;
+  $('helloUnlockState').textContent = st.helloUnlock ? 'on' : 'off';
+  $('helloUnlockSetBtn').textContent = st.helloUnlock ? 'Turn off' : 'Turn on';
+  $('helloUnlockSetBtn').disabled = !st.hello;
+  $('helloUnlockBtn').hidden = !(st.helloUnlock && st.hello);
+  $('gmailState').textContent = st.gmail ? 'connected' : 'off';
+  $('gmailBtn').textContent = st.gmail ? 'Disconnect' : 'Connect';
+  $('extState').textContent = st.ext ? 'connected' : 'not linked';
+  $('extBtn').textContent = st.ext ? 'New link code' : 'Get link code';
+  $('autolockNote').textContent = `Locks itself after ${st.autolockMin} minutes idle. Mark can use your logins but never sees them.`;
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) $('helloLabel').firstChild.textContent = 'Face ID / fingerprint ';
+  const focusTarget = !st.exists ? 'newPass' : !(st.unlocked && st.authed) ? 'unlockPass' : null;
+  if (focusTarget && document.activeElement === document.body) $(focusTarget).focus();
+}
+
+function drawList() {
+  const q = $('search').value.toLowerCase();
+  const shown = items.filter((i) => `${i.name} ${i.username} ${i.url}`.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  $('listTitle').textContent = `Your logins (${items.length})`;
+  $('list').replaceChildren(...(shown.length ? shown.map(row) : [Object.assign(document.createElement('p'), { className: 'empty', textContent: items.length ? 'Nothing matches that search.' : 'No logins yet. Add one below, or ask Mark to create one.' })]));
+}
+
+function row(i) {
+  const el = (tag, props, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter(Boolean)); return n; };
+  const div = el('div', { className: 'login', id: `row-${i.id}` },
+    el('div', { className: 'who' }, el('b', { textContent: i.name }), el('small', { textContent: (i.username || i.url || '') + (i.has2fa ? '  ·  2FA' : '') })),
+    el('button', { textContent: 'copy', title: 'Copy the password', onclick: () => send('reveal', { id: i.id, copy: true }) }),
+    el('button', { textContent: 'show', title: 'Show the password for 10 seconds', onclick: () => send('reveal', { id: i.id }) }),
+    i.has2fa ? el('button', { textContent: 'code', title: 'Show the current 2FA code', onclick: () => send('totp', { id: i.id }) }) : null,
+    el('button', { textContent: '✕', className: 'danger', title: 'Delete', onclick: () => confirm(`Delete ${i.name}?`) && send('delete', { id: i.id }) }));
+  return div;
+}
+
+function putUnder(id, text, seconds) {
+  const row = document.getElementById(`row-${id}`);
+  if (!row) return;
+  let code = row.querySelector('code') || row.appendChild(document.createElement('code'));
+  code.textContent = text;
+  clearTimeout(codeTimers.get(id));
+  codeTimers.set(id, setTimeout(() => code.remove(), seconds * 1000));
+}
+const showSecret = (r) => r.copy ? copyText(r.password, 'Password') : putUnder(r.id, r.password, 10);
+const showCode = (t) => putUnder(t.id, `2FA code ${t.code}  ·  ${t.expiresIn}s left`, t.expiresIn);
+
+async function copyText(value, label) {
+  try {
+    await navigator.clipboard.writeText(value);
+    say(`${label} copied. It clears in 30 seconds.`);
+    setTimeout(async () => {
+      try { if ((await navigator.clipboard.readText()) === value) await navigator.clipboard.writeText(''); } catch { navigator.clipboard.writeText('').catch(() => {}); }
+    }, 30_000);
+    return true;
+  } catch { say('Click this window first, then press copy again.', true); return false; }
+}
+async function copySecret(m) {
+  const ok = await copyText(m.value, `${m.what === 'username' ? 'Username' : m.what === 'code' ? '2FA code' : 'Password'} for ${m.name}`);
+  ws.send(JSON.stringify({ type: 'secret_ack', id: m.id, ok }));
+}
+
+const { helloRegister, helloAssert } = window.__prf;
+
+async function setUpHello(o) {
+  try { send('hello_register', { response: await helloRegister(o) }); }
+  catch (e) { say(e.name === 'NotAllowedError' ? 'Setup was cancelled.' : e.message, true); }
+}
+
+// --- buttons ---
+$('createBtn').onclick = () => {
+  const a = $('newPass').value, b = $('newPass2').value;
+  if (a !== b) return say("Those two don't match.", true);
+  if (a.length < 10) return say('Use at least 10 characters.', true);
+  send('create', { master: a });
+  $('newPass').value = $('newPass2').value = '';
+};
+$('unlockBtn').onclick = () => { send('unlock', { master: $('unlockPass').value }); $('unlockPass').value = ''; };
+$('lockBtn').onclick = () => send('lock');
+$('genBtn').onclick = () => send('generate');
+$('saveBtn').onclick = () => {
+  if (!$('fName').value.trim()) return say('Give the login a name.', true);
+  send('add', { item: { name: $('fName').value, username: $('fUser').value, url: $('fUrl').value, password: $('fPass').value, totp: $('fTotp').value } });
+  for (const id of ['fName', 'fUser', 'fUrl', 'fPass', 'fTotp']) $(id).value = '';
+  $('fPass').type = 'password';
+};
+$('search').oninput = drawList;
+$('helloBtn').onclick = () => send('hello_options');
+$('helloUnlockSetBtn').onclick = () => (st.helloUnlock ? send('hello_unlock_disable') : send('hello_unlock_setup_options'));
+$('helloUnlockBtn').onclick = () => send('hello_unlock_options');
+$('gmailBtn').onclick = () => st.gmail ? send('gmail_disconnect') : show('gmailForm', $('gmailForm').hidden);
+$('gConnect').onclick = () => { say('Checking with Gmail…'); send('gmail_connect', { user: $('gUser').value.trim(), pass: $('gPass').value.replace(/\s+/g, '') }); };
+$('extBtn').onclick = () => send('ext_code');
+
+// --- Importing an export file (Chrome, Edge, Safari, Bitwarden, 1Password, Proton, LastPass) ---
+// Exporters disagree on almost everything: the separator, the column names, CSV versus JSON. Rather
+// than demand one shape, work out what we've been given and say plainly when it isn't a password file.
+function parseCsv(text, delim) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === delim) { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') { if (field || row.length) { row.push(field); rows.push(row); row = []; field = ''; } if (ch === '\r' && text[i + 1] === '\n') i++; }
+    else field += ch;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/** Comma, semicolon (European Excel) or tab — whichever splits the header line into most columns. */
+function sniffDelimiter(text) {
+  const head = text.split(/\r?\n/)[0] || '';
+  return [',', ';', '\t'].sort((a, b) => head.split(b).length - head.split(a).length)[0];
+}
+
+const tidyUrl = (u) => String(u || '').trim().replace(/^\w+:\/\//, '').replace(/\/.*$/, '');
+
+function fromCsv(text) {
+  const rows = parseCsv(text, sniffDelimiter(text)).filter((r) => r.some((c) => c.trim()));
+  if (rows.length < 2) throw new Error('That file has no rows in it.');
+  const head = rows[0].map((h) => h.toLowerCase().replace(/[^a-z]/g, ''));
+  const col = (...names) => head.findIndex((h) => names.includes(h));
+  const iName = col('name', 'title', 'accountname', 'displayname'), iUrl = col('url', 'website', 'loginuri', 'urls', 'uri', 'weburl');
+  const iUser = col('username', 'loginusername', 'user', 'email', 'emailaddress'), iPass = col('password', 'loginpassword', 'pass');
+  const iTotp = col('totp', 'logintotp', 'otpauth', 'twofactor', 'otp'), iNote = col('note', 'notes', 'comments');
+  if (iPass < 0) throw new Error(`I can't see a password column in that file. It has: ${rows[0].join(', ').slice(0, 120)}.`);
+  return rows.slice(1).map((r) => ({
+    name: (r[iName] || r[iUrl] || '').trim() || 'Untitled',
+    username: (r[iUser] || '').trim(),
+    url: tidyUrl(r[iUrl]),
+    password: r[iPass] || '',
+    totp: (r[iTotp] || '').trim(),
+    notes: (r[iNote] || '').trim(),
+  }));
+}
+
+function fromJson(text) {
+  const data = JSON.parse(text);
+  const list = Array.isArray(data) ? data : data.items || data.logins || data.accounts || data.data?.items || [];
+  if (!Array.isArray(list) || !list.length) throw new Error("That JSON file doesn't contain a list of logins.");
+  return list.map((it) => {
+    const login = it.login || it;                        // Bitwarden nests it; most others don't
+    return {
+      name: (it.name || it.title || login.username || 'Untitled').toString().trim(),
+      username: (login.username || login.user || it.username || '').toString().trim(),
+      url: tidyUrl(login.uris?.[0]?.uri || login.uri || login.url || it.url || it.website),
+      password: (login.password || it.password || '').toString(),
+      totp: (login.totp || it.totp || '').toString().trim(),
+      notes: (it.notes || it.note || '').toString().trim(),
+    };
+  });
+}
+
+/** Everything in the file, and how many rows had no password and so can't be saved. */
+function readExport(text, filename = '') {
+  const trimmed = text.replace(/^\uFEFF/, '').trim();
+  if (!trimmed) throw new Error('That file is empty.');
+  const looksJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+  const all = looksJson ? fromJson(trimmed) : fromCsv(trimmed);
+  const logins = all.filter((x) => x.password);
+  return { logins, skipped: all.length - logins.length, kind: looksJson ? 'JSON' : 'CSV' };
+}
+window.__readExport = readExport;                        // so it can be tested without a file dialog
+
+async function doImport(file) {
+  if (!file) return say('Choose the exported file first.', true);
+  try {
+    const { logins, skipped, kind } = readExport(await file.text(), file.name);
+    if (!logins.length) return say(`No logins with passwords in that ${kind} file.`, true);
+    say(`Reading ${logins.length} logins from that ${kind} file${skipped ? ` (${skipped} had no password)` : ''}…`);
+    send('import', { logins });
+    $('csvFile').value = '';
+  } catch (e) { say(e.message, true); }
+}
+
+$('importBtn').onclick = () => doImport($('csvFile').files[0]);
+$('csvFile').onchange = () => { const f = $('csvFile').files[0]; if (f) say(`Ready to import ${f.name}. Press Import.`); };
+const $drop = $('dropZone');
+['dragover', 'dragenter'].forEach((e) => $drop.addEventListener(e, (ev) => { ev.preventDefault(); $drop.style.borderColor = 'rgba(var(--gold),.9)'; }));
+['dragleave', 'drop'].forEach((e) => $drop.addEventListener(e, () => ($drop.style.borderColor = 'rgba(var(--gold),.3)')));
+$drop.addEventListener('drop', (ev) => { ev.preventDefault(); doImport(ev.dataTransfer.files[0]); });
+
+// Enter submits whatever section you're in.
+addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.keyCode !== 13) return;
+  const inSection = (id) => !$(id).hidden && $(id).contains(document.activeElement);
+  if (inSection('createView')) $('createBtn').click();
+  else if (inSection('unlockView')) $('unlockBtn').click();
+  else if (!$('gmailForm').hidden && $('gmailForm').contains(document.activeElement)) $('gConnect').click();
+  else if (inSection('mainView') && document.activeElement !== $('search')) $('saveBtn').click();
+});
+
+connect();
+</script>
+<script src="/vendor/simplewebauthn/index.umd.min.js"></script>
+<script src="/hello-prf.js"></script>
+</body>
+</html>

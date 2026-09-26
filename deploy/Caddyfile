@@ -1,0 +1,4 @@
+{$JARVIS_DOMAIN} {
+	encode gzip
+	reverse_proxy jarvis:7777
+}

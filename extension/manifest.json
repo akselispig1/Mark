@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Mark Autofill",
+  "version": "1.0.0",
+  "description": "Lets Mark type your saved logins into websites, only after you approve with Windows Hello. Mark never sees the password.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Mark Autofill"
+  }
+}

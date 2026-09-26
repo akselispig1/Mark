@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve · MARK</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: rgba(255,196,64,.85); font: 300 14px/1.6 "Segoe UI", system-ui, sans-serif; }
+  main { height: 100%; display: grid; place-items: center; text-align: center; padding: 0 22px; }
+  .orb { width: 86px; height: 86px; margin: 0 auto 18px; border-radius: 50%;
+    background: radial-gradient(circle, #fff3c4 0%, #ffc440 28%, rgba(184,106,0,.45) 60%, transparent 72%); box-shadow: 0 0 60px rgba(255,196,64,.35);
+    animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.08); opacity: .8; } }
+  h1 { font-size: 11px; font-weight: 400; letter-spacing: .45em; color: #ffc440; margin: 0 0 12px; }
+  .what { font-size: 16px; color: #ffe2a0; margin: 0 0 4px; }
+  .site { font: 13px Consolas, monospace; color: #ffd98a; background: rgba(255,196,64,.08); display: inline-block; padding: 3px 10px; border-radius: 6px; margin: 6px 0 18px; }
+  button { display: block; width: 260px; margin: 8px auto 0; padding: 11px; border-radius: 9px; font: inherit; cursor: pointer;
+    background: rgba(255,196,64,.12); color: #ffc440; border: 1px solid rgba(255,196,64,.55); letter-spacing: .08em; }
+  button.no { background: none; border-color: rgba(255,120,90,.4); color: rgba(255,150,120,.9); }
+  .msg { margin-top: 14px; font-size: 12px; opacity: .75; min-height: 1.4em; }
+</style>
+</head>
+<body>
+<main><div>
+  <div class="orb"></div>
+  <h1>MARK REQUESTS PERMISSION</h1>
+  <p class="what" id="what">…</p>
+  <div class="site" id="site"></div>
+  <button id="yes">Approve with Windows Hello</button>
+  <button id="no" class="no">Deny</button>
+  <p class="msg" id="msg"></p>
+</div></main>
+<script src="/vendor/simplewebauthn/index.umd.min.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const $ = (x) => document.getElementById(x);
+const post = (path, body) => fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...body }) }).then((r) => r.json());
+let busy = false;
+
+async function approve() {
+  if (busy) return; busy = true;
+  $('msg').textContent = /iPhone|iPad|Android/i.test(navigator.userAgent) ? 'Look at your phone…' : 'Look at your camera, or use your fingerprint or PIN…';
+  try {
+    const optionsJSON = await post('/approval/options', {});
+    if (optionsJSON.error) throw new Error(optionsJSON.error);
+    const response = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON });
+    const r = await post('/approval/verify', { response });
+    if (!r.ok) throw new Error(r.error || 'Not approved.');
+    $('msg').textContent = 'Approved. ✓';
+    setTimeout(() => { window.close(); $('msg').textContent = 'Approved. ✓ You can close this.'; }, 700);
+  } catch (e) {
+    $('msg').textContent = e.name === 'NotAllowedError' ? 'Cancelled. Press Approve to try again.' : e.message;
+  } finally { busy = false; }
+}
+$('yes').onclick = approve;
+$('no').onclick = async () => { await post('/approval/deny', {}); $('msg').textContent = 'Denied.'; setTimeout(() => window.close(), 500); };
+
+fetch(`/approval?id=${encodeURIComponent(id)}`).then((r) => r.json()).then((a) => {
+  if (a.error) { $('what').textContent = a.error; $('yes').hidden = $('no').hidden = true; return; }
+  $('what').textContent = a.action === 'fill' ? `Type your ${a.name} login into this site?` : `Copy your ${a.name} ${a.what === 'code' ? '2FA code' : a.what || 'password'} to the clipboard?`;
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) { $('yes').textContent = 'Approve with Face ID'; document.querySelector('h1').textContent = 'MARK NEEDS YOUR OK'; }
+  $('site').textContent = a.host || (a.username ? a.username : '');
+  $('site').hidden = !$('site').textContent;
+  // PC: pop Windows Hello straight away. Phones need a tap before Face ID can start.
+  if (!/iPhone|iPad|Android/i.test(navigator.userAgent)) approve();
+});
+</script>
+</body>
+</html>

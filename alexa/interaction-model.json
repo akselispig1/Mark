@@ -1,0 +1,62 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "mark",
+      "modelConfiguration": { "fallbackIntentSensitivity": { "level": "LOW" } },
+      "intents": [
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] },
+        {
+          "name": "QueryIntent",
+          "slots": [{ "name": "query", "type": "Anything" }],
+          "samples": [
+            "{query}",
+            "ask {query}",
+            "tell me {query}",
+            "can you {query}",
+            "please {query}",
+            "mark {query}"
+          ]
+        }
+      ],
+      "types": [
+        {
+          "name": "Anything",
+          "values": [
+            { "name": { "value": "what is the weather like today" } },
+            { "name": { "value": "what time is it" } },
+            { "name": { "value": "how much space is left on my computer" } },
+            { "name": { "value": "read me the news" } },
+            { "name": { "value": "when is the next train to Bern" } },
+            { "name": { "value": "set an alarm for seven in the morning" } },
+            { "name": { "value": "remind me to take the bins out in twenty minutes" } },
+            { "name": { "value": "what is on my schedule" } },
+            { "name": { "value": "call me in five minutes" } },
+            { "name": { "value": "turn the volume down on my computer" } },
+            { "name": { "value": "play some music on my pc" } },
+            { "name": { "value": "what did I ask you to do yesterday" } },
+            { "name": { "value": "remember that my favourite colour is gold" } },
+            { "name": { "value": "check if my website is up" } },
+            { "name": { "value": "summarise the news from Switzerland" } },
+            { "name": { "value": "how long until my next meeting" } },
+            { "name": { "value": "look up how tall the Eiffel tower is" } },
+            { "name": { "value": "start a background task to clean my downloads folder" } },
+            { "name": { "value": "what is the battery level of my laptop" } },
+            { "name": { "value": "tell me a joke about robots" } },
+            { "name": { "value": "what should I make for dinner tonight" } },
+            { "name": { "value": "explain quantum physics simply" } },
+            { "name": { "value": "how do you spell necessary" } },
+            { "name": { "value": "what is fifteen percent of two hundred and forty" } },
+            { "name": { "value": "cancel the morning briefing" } },
+            { "name": { "value": "what are my scheduled jobs" } },
+            { "name": { "value": "good morning" } },
+            { "name": { "value": "thank you" } },
+            { "name": { "value": "never mind" } }
+          ]
+        }
+      ]
+    }
+  }
+}

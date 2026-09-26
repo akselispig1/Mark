@@ -1,0 +1,947 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>MARK</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root { --gold: 255, 196, 64; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden;
+    font: 300 13px/1.5 "Segoe UI", system-ui, sans-serif; color: rgba(var(--gold), .75); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  #caption { position: fixed; left: 50%; bottom: 14vh; transform: translateX(-50%);
+    width: min(560px, 86vw); text-align: center; letter-spacing: .02em;
+    transition: opacity .6s; opacity: 0; pointer-events: none; }
+  #caption.on { opacity: 1; }
+  #state { position: fixed; left: 50%; top: 8vh; transform: translateX(-50%);
+    font-size: 10px; letter-spacing: .5em; text-transform: uppercase; color: rgba(var(--gold), .35); }
+  #call { position: fixed; right: 22px; bottom: 22px; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid rgba(var(--gold), .25); background: none; color: rgba(var(--gold), .6);
+    cursor: pointer; display: grid; place-items: center; transition: .3s; }
+  #call:hover { border-color: rgba(var(--gold), .7); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .35); }
+  #call svg, .corner svg { width: 15px; height: 15px; }
+  .corner { position: fixed; left: 22px; bottom: 22px; width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid rgba(var(--gold), .25); background: none; color: rgba(var(--gold), .6);
+    cursor: pointer; display: grid; place-items: center; transition: .3s; }
+  .corner:hover { border-color: rgba(var(--gold), .7); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .35); }
+  #overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55);
+    backdrop-filter: blur(6px); z-index: 5; text-align: center; letter-spacing: .08em; }
+  #overlay img { width: min(260px, 70vw); border-radius: 10px; box-shadow: 0 0 60px rgba(var(--gold), .25); }
+  #overlay p { margin: 18px 0 0; color: rgba(var(--gold), .6); font-size: 12px; }
+  #ring { position: fixed; inset: 0; z-index: 4; display: grid; align-content: end; justify-items: center;
+    padding-bottom: 20vh; pointer-events: none; }
+  #ring b { font-weight: 300; letter-spacing: .5em; font-size: 12px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #hangup { position: fixed; left: 50%; bottom: calc(5vh + 44px); transform: translateX(-50%); z-index: 3;
+    width: 52px; height: 52px; border-radius: 50%; border: 1px solid rgba(255,90,60,.5); background: none;
+    color: rgba(255,120,90,.9); cursor: pointer; display: grid; place-items: center; }
+  #hangup svg { width: 20px; height: 20px; transform: rotate(135deg); }
+  #hand { left: auto; right: 22px; top: 22px; bottom: auto; }
+  #hand.grab { transform: scale(1.15); background: rgba(var(--gold), .15); }
+  #hand.on { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .4); }
+  #handview { position: fixed; right: 22px; top: 70px; width: 168px; height: 126px; border-radius: 10px;
+    border: 1px solid rgba(var(--gold), .22); background: #000; z-index: 2; }
+  #vaultBtn { left: 22px; top: 22px; bottom: auto; }
+  #vaultBtn.on { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .4); }
+  #voiceBtn { left: 22px; top: 70px; bottom: auto; }     /* under the key — the other "is this you?" control */
+  #voiceBtn.on { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .4); }
+  #vault { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(0,0,0,.6); backdrop-filter: blur(8px); }
+  .vcard { position: relative; width: min(440px, 92vw); max-height: 86vh; overflow: auto; padding: 26px 24px 20px;
+    border: 1px solid rgba(var(--gold), .25); border-radius: 14px; background: rgba(12,10,4,.92); box-shadow: 0 0 60px rgba(var(--gold), .12); }
+  .vcard h3 { margin: 0 0 14px; font-weight: 300; font-size: 11px; letter-spacing: .45em; color: rgb(var(--gold)); }
+  .vcard input { display: block; width: 100%; margin: 0 0 8px; padding: 9px 10px; background: rgba(0,0,0,.5); color: rgba(var(--gold), .95);
+    border: 1px solid rgba(var(--gold), .2); border-radius: 8px; font: inherit; outline: none; }
+  .vcard input:focus { border-color: rgba(var(--gold), .6); }
+  .vcard button { background: none; border: 1px solid rgba(var(--gold), .3); color: rgba(var(--gold), .85); border-radius: 7px;
+    padding: 5px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+  .vcard button:hover { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); }
+  .vcard .vgo { width: 100%; padding: 9px; margin-top: 4px; font-size: 12px; letter-spacing: .2em; }
+  .vcard .vx { position: absolute; right: 12px; top: 10px; border: none; font-size: 18px; padding: 0 6px; }
+  .vcard .vlock { margin-top: 14px; }
+  .vlist { margin: 6px 0 14px; max-height: 38vh; overflow: auto; }
+  .vrow { display: flex; gap: 6px; align-items: center; padding: 8px 2px; border-bottom: 1px solid rgba(var(--gold), .08); flex-wrap: wrap; }
+  .vname { flex: 1; min-width: 120px; }
+  .vname small { display: block; opacity: .5; font-size: 11px; }
+  .vrow code { flex-basis: 100%; order: 9; font: 12px Consolas, monospace; color: rgb(255,225,150); word-break: break-all; }
+  .vadd { border-top: 1px solid rgba(var(--gold), .15); padding-top: 12px; }
+  .vpw { display: flex; gap: 6px; } .vpw input { flex: 1; }  .vpw button { margin-bottom: 8px; }
+  .vnote { font-size: 11px; opacity: .55; margin: 6px 0 10px; line-height: 1.5; }
+  .verr { font-size: 12px; color: #ff9a7a; margin: 8px 0 0; }
+  .vsec { border-top: 1px solid rgba(var(--gold), .15); margin-top: 14px; padding-top: 12px; display: grid; gap: 8px; }
+  .vsec div { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+  .vsec b { font-weight: 400; color: rgb(var(--gold)); }
+  .vcode { font: 13px Consolas, monospace; color: #ffe2a0; background: rgba(var(--gold), .08); padding: 6px 8px; border-radius: 6px; word-break: break-all; user-select: all; }
+  #approve { position: fixed; left: 50%; top: 16vh; transform: translateX(-50%); z-index: 7; width: min(380px, 90vw); text-align: center;
+    padding: 18px 18px 14px; border: 1px solid rgba(var(--gold), .45); border-radius: 14px; background: rgba(12,10,4,.95); box-shadow: 0 0 60px rgba(var(--gold), .2); }
+  #approve p { margin: 0 0 12px; color: #ffe2a0; }
+  #approve button { margin: 4px; padding: 9px 14px; border-radius: 8px; font: inherit; cursor: pointer; background: rgba(var(--gold), .12); color: rgb(var(--gold)); border: 1px solid rgba(var(--gold), .5); }
+  #approve button.no { background: none; border-color: rgba(255,120,90,.4); color: rgba(255,150,120,.9); }
+  #approve small { display: block; opacity: .55; margin-top: 6px; font-size: 11px; }
+  #type { position: fixed; left: 50%; bottom: 5vh; transform: translateX(-50%); width: min(420px, 80vw);
+    background: none; border: none; border-bottom: 1px solid rgba(var(--gold), .15); outline: none;
+    color: rgba(var(--gold), .8); font: inherit; text-align: center; padding: 6px; }
+  #type::placeholder { color: rgba(var(--gold), .2); }
+  #type:focus { border-bottom-color: rgba(var(--gold), .45); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="state">offline</div>
+<div id="caption"></div>
+<input id="type" placeholder="say “Mark…” or type" autocomplete="off">
+<button id="pair" class="corner" title="Pair your phone" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+</button>
+<button id="bell" class="corner" title="Let Mark call this phone" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+</button>
+<button id="hand" class="corner" title="Hand control (camera): pinch + spread to zoom">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/></svg>
+</button>
+<button id="vaultBtn" class="corner" title="Password vault">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M16 7l3 3M18.5 4.5l2 2"/></svg>
+</button>
+<button id="voiceBtn" class="corner" title="Teach Mark your voice (only you)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>
+</button>
+<canvas id="handview" width="336" height="252" hidden></canvas>
+<div id="approve" hidden></div>
+<div id="overlay" hidden></div>
+<div id="ring" hidden><b>INCOMING · TAP THE ORB TO ANSWER</b></div>
+<button id="hangup" title="Hang up" hidden>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>
+</button>
+<button id="call" title="Have Mark ring your phone">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>
+</button>
+<script>
+/* ---------- Orb ---------- */
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+var W, H, DPR;   // var so the HUD can read window.H
+function resize() { DPR = Math.min(devicePixelRatio || 1, 2); W = cv.width = innerWidth * DPR; H = cv.height = innerHeight * DPR; }
+addEventListener('resize', resize); resize();
+
+const TAU = Math.PI * 2;
+// Shell particles on lat/long so they can flow in swirling bands.
+const N = 2200, shell = [];
+for (let i = 0; i < N; i++) {
+  const lat = Math.asin(1 - (i / (N - 1)) * 2), lon = i * 2.39996323;
+  shell.push({ lat, lon, ph: Math.random() * TAU, spd: .5 + Math.random(), out: 1 + Math.random() * 1.8 });
+}
+// Orbital lines: a gyroscope of rings at different sizes and tilts, each slowly precessing.
+// Every third ring carries a comet; a few are dashed, like instrument markings.
+const rings = Array.from({ length: 14 }, (_, i) => ({
+  tiltX: (i * 1.618) % Math.PI - Math.PI / 2,
+  tiltZ: (i * 2.399) % TAU,
+  r: 1.25 + (i % 7) * .13 + (i > 6 ? .06 : 0),
+  // each orbit has 1-3 bodies, all at different speeds and directions
+  bodies: Array.from({ length: 1 + (i % 3) }, (_, k) => ({
+    speed: (i % 2 ? -1 : 1) * (.08 + ((i * 7 + k * 3) % 13) * .045) * (k % 2 ? -1 : 1),
+    phase: i * 1.3 + k * 2.1,
+    size: .6 + ((i + k) % 4) * .35,
+    tail: 10 + ((i * 5 + k * 11) % 36),
+  })),
+  precess: (i % 3 - 1) * .04,
+  dashed: i % 4 === 1,
+  weight: i % 5 === 0 ? 1.4 : .8,
+}));
+const sparks = [];
+
+let mode = 'idle', level = 0, target = 0, t = 0;
+// View state driven by touch: rotation, zoom, and "burst" expansion.
+let yaw = 0, pitch = .35, vYaw = .004, vPitch = 0, zoom = 1, zoomTarget = 1, burst = 0, burstTarget = 0, burstVel = 0;
+let dragging = false;
+var handTarget = null;            // set by hand.js while you spin with your hand; the orb eases toward it
+// Boot sequence: the orb ignites, then the HUD rings sweep in and the readouts come online.
+const bootStart = performance.now();
+let boot = 0, hudSweep = 0, bootDone = false;
+const PROFILE = { idle: [.3, .0012], listening: [.65, .002], thinking: [.5, .008], speaking: [.85, .003], offline: [.1, .0005] };
+
+function project(x, y, z) {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const x1 = x * cy - z * sy; let z1 = x * sy + z * cy;
+  const y1 = y * cp - z1 * sp; z1 = y * sp + z1 * cp;
+  return [x1, y1, z1];
+}
+
+let fps = 60, lastFrameAt = 0, lowPower = false;
+function frame() {
+  const nowMs = performance.now();
+  if (lastFrameAt) fps += (1000 / Math.max(1, nowMs - lastFrameAt) - fps) * .1;
+  lastFrameAt = nowMs;
+  lowPower = fps < 45;                       // e.g. while hand tracking shares the graphics chip
+  window.__fps = fps;
+  t += 1 / 60;
+  boot = Math.min(1, (performance.now() - bootStart) / 2800);
+  hudSweep = 1 - Math.pow(1 - Math.min(1, Math.max(0, (boot - .25) / .6)), 3);
+  if (boot === 1 && !bootDone) { bootDone = true; caption('All systems online.', 2500); }
+  const [bright, spin] = PROFILE[mode];
+  if (mode === 'speaking') target = .15 + .85 * audioLevel();
+  if (mode === 'thinking') target = .3 + .2 * Math.sin(t * 4);
+  if (mode === 'idle' || mode === 'offline') target = .08 + .06 * Math.sin(t * 1.2);
+  level += (target - level) * .12;
+
+  if (handTarget) {                          // smooth hand spin: glide toward where your hand points
+    const dy = (handTarget.yaw - yaw) * .25, dp = (handTarget.pitch - pitch) * .25;
+    yaw += dy; pitch += dp; vYaw = dy; vPitch = dp;
+  }
+  if (!dragging) { yaw += vYaw; pitch += vPitch; vYaw += (spin - vYaw) * .02; vPitch *= .95; pitch += (.35 - pitch) * .01; }
+  zoom += (zoomTarget - zoom) * .16;                       // glides to the new size instead of snapping
+  burstVel += (burstTarget - burst) * .06; burstVel *= .82; burst += burstVel;   // springy expand / collapse
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(0, 0, W, H);
+  const ignite = 1 - Math.pow(1 - Math.min(1, boot / .35), 3);
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * .12 * zoom * (1 + level * .15) * (.05 + .95 * ignite);
+
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * (2.8 + burst * 2));
+  g.addColorStop(0, `rgba(255,185,50,${.16 * bright + level * .16})`);
+  g.addColorStop(.4, `rgba(255,130,10,${.05 * bright + level * .05})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // Plasma core: three drifting hot spots
+  for (let k = 0; k < 3; k++) {
+    const a = t * (.7 + k * .3) + k * 2.1, off = R * .04 * (1 + level);   // stays centred
+    const px = cx + Math.cos(a) * off, py = cy + Math.sin(a * 1.3) * off;
+    const c = ctx.createRadialGradient(px, py, 0, px, py, R * (.5 + level * .25));
+    c.addColorStop(0, `rgba(255,${220 - k * 30},${140 - k * 40},${.18 + level * .3})`); c.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = c; ctx.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
+  }
+
+  // Shell particles flowing in bands
+  for (let si = 0; si < shell.length; si += lowPower ? 2 : 1) {
+    const p = shell[si];
+    const lon = p.lon + t * .04 * p.spd * Math.sin(p.lat * 3 + t * .06);
+    const wob = 1 + level * .2 * Math.sin(p.ph + t * 1.4 + p.lat * 5) + .015 * Math.sin(p.ph + t * .4) + burst * p.out * 1.4;
+    const cl = Math.cos(p.lat);
+    const [x, y, z] = project(Math.cos(lon) * cl, Math.sin(p.lat), Math.sin(lon) * cl);
+    const d = (z + 1.6) / 2.6;
+    const a = (.12 + .88 * d) * (.35 + bright * .65) * (1 - burst * .35);
+    ctx.fillStyle = `rgba(255,${165 + 70 * d | 0},${50 + 110 * d * level | 0},${a})`;
+    const s = (.6 + d * 1.5) * DPR;
+    ctx.fillRect(cx + x * R * wob, cy + y * R * wob, s, s);
+  }
+
+  // Orbital lines + comets
+  ctx.lineCap = 'round';
+  for (const ring of rings) {
+    const tz = ring.tiltZ + t * ring.precess;
+    const cT = Math.cos(ring.tiltX), sT = Math.sin(ring.tiltX), cZ = Math.cos(tz), sZ = Math.sin(tz);
+    const rr = ring.r * (1 + burst * .8) * (1 + level * .06);
+    const pt = (ang) => {
+      let x = Math.cos(ang) * rr, y = 0, z = Math.sin(ang) * rr;
+      [y, z] = [y * cT - z * sT, y * sT + z * cT];
+      [x, y] = [x * cZ - y * sZ, x * sZ + y * cZ];
+      return project(x, y, z);
+    };
+    const SEG = lowPower ? 40 : 96, BANDS = 6;
+    const pts = [];
+    for (let i = 0; i <= SEG; i++) pts.push(pt(i / SEG * TAU));
+    ctx.lineWidth = ring.weight * DPR;
+    const glow = 1 + level + talkGlow() * 1.6;
+    for (let b = 0; b < BANDS; b++) {                        // group segments by depth: front bands brighter
+      const d = (b + .5) / BANDS;
+      ctx.strokeStyle = `rgba(255,${175 + 50 * d | 0},70,${(.03 + .16 * d * d) * (.45 + bright) * glow})`;
+      ctx.beginPath();
+      let pen = false;
+      for (let i = 1; i <= SEG; i++) {
+        if (ring.dashed && i % 4 >= 2) { pen = false; continue; }
+        const depth = ((pts[i - 1][2] + pts[i][2]) / 2 + 2) / 4;
+        if (Math.min(BANDS - 1, Math.max(0, Math.floor(depth * BANDS))) !== b) { pen = false; continue; }
+        if (!pen) { ctx.moveTo(cx + pts[i - 1][0] * R, cy + pts[i - 1][1] * R); pen = true; }
+        ctx.lineTo(cx + pts[i][0] * R, cy + pts[i][1] * R);
+      }
+      ctx.stroke();
+    }
+    for (const body of ring.bodies) {
+      const head = body.phase + t * body.speed;
+      const dir = Math.sign(body.speed);
+      for (let j = 0; j < (lowPower ? Math.min(12, body.tail) : body.tail); j++) {
+        const [x, y, z] = pt(head - j * .016 * dir);
+        const f = 1 - j / body.tail, d = (z + 2) / 4;
+        ctx.fillStyle = `rgba(255,${200 + 55 * f | 0},${120 + 100 * f | 0},${f * f * (.35 + .5 * d) * (.6 + level * .6)})`;
+        const sz = (.8 + 2 * f) * body.size * DPR;
+        ctx.fillRect(cx + x * R - sz / 2, cy + y * R - sz / 2, sz, sz);
+      }
+    }
+  }
+
+  // MARK-style HUD: flat dial rings, tick scales, counter-rotating arc segments, circuit traces.
+  drawHud(cx, cy, R, bright);
+
+  // Sparks fly off when he talks loudly or when you burst it
+  if (Math.random() < level * .9 + burst * .6) {
+    const a = Math.random() * TAU, b = Math.acos(Math.random() * 2 - 1);
+    sparks.push({ x: Math.sin(b) * Math.cos(a), y: Math.cos(b), z: Math.sin(b) * Math.sin(a), r: 1, v: .012 + Math.random() * .03, life: 1 });
+  }
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i]; s.r += s.v; s.life -= .015;
+    if (s.life <= 0) { sparks.splice(i, 1); continue; }
+    const [x, y] = project(s.x * s.r, s.y * s.r, s.z * s.r);
+    ctx.fillStyle = `rgba(255,220,150,${s.life * .8})`;
+    ctx.fillRect(cx + x * R, cy + y * R, 1.6 * DPR, 1.6 * DPR);
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);   // start after the whole script (HUD data etc.) is defined
+
+/* ---------- HUD (Iron Man MARK style) ---------- */
+// Circuit traces: leave the outer ring at an angle, run out, bend horizontal, end in a node + tiny readout.
+// Live PC stats for the readouts (polled from the server every 2 s).
+let live = {};
+const pollStats = () => fetch('/stats').then(r => r.json()).then(d => (live = d)).catch(() => {});
+pollStats(); setInterval(pollStats, 2000);
+const pct = (v) => v == null ? '--' : String(v).padStart(2, ' ') + '%';
+// Angles are relative to the outer ring (which sways), kept well clear of its 4 gaps so every trace stays attached.
+const traces = [
+  { a: -0.62, out: .55, run: 1.25, label: () => `MEM  ${pct(live.mem)}` },
+  { a: -0.32, out: .35, run: .95,  label: () => `PWR  ${live.battery == null ? 'AC' : live.battery + '%' + (live.charging ? ' ⚡' : ' ▼')}` },
+  { a: 0.42,  out: .45, run: 1.1,  label: () => `NET  ${live.ping == null ? 'offline' : live.ping + ' ms'}` },
+  { a: Math.PI + 0.55, out: .5, run: 1.2, label: () => `CPU  ${pct(live.cpu)}` },
+  { a: Math.PI - 0.35, out: .3, run: .9,  label: () => `TIME ${new Date().toTimeString().slice(0, 8)}` },
+  { a: Math.PI - 0.8,  out: .55, run: 1.05, label: () => `DISK ${pct(live.disk)}` },
+];
+// While you spin (drag, or the all-finger pinch), each HUD ring flies into its own random 3D orbit
+// and turns with the orb; let go and they spring back to the flat MARK layout.
+let spinning = false, scatter = 0, scatterVel = 0, hudSpinX = 0, hudSpinY = 0;
+const hudRings = Array.from({ length: 6 }, () => ({ tx: 0, ty: 0, drift: 0 }));
+function beginSpin() {
+  if (spinning) return;
+  spinning = true;
+  for (const r of hudRings) {                 // fresh random orbit for every ring, every spin
+    r.tx = (Math.random() * 2 - 1) * 1.35;
+    r.ty = (Math.random() * 2 - 1) * 1.35;
+    r.drift = (Math.random() * 2 - 1) * .9;
+  }
+}
+function endSpin() { spinning = false; }
+function stepScatter() {
+  scatterVel += ((spinning ? 1 : 0) - scatter) * .05; scatterVel *= .8; scatter += scatterVel;   // springy
+  if (spinning) { hudSpinY += vYaw; hudSpinX += vPitch; }
+  else { hudSpinX *= .9; hudSpinY *= .9; }
+}
+// Point on HUD ring `i` at radius r (px) and angle a, after its scatter tilt + the shared spin.
+function hp(cx, cy, i, r, a) {
+  const ring = hudRings[i], s = scatter;
+  let x = Math.cos(a) * r, y = Math.sin(a) * r, z = 0;
+  const ax = ring.tx * s + hudSpinX * s + ring.drift * s * t * .3;
+  const ay = ring.ty * s + hudSpinY * s;
+  const cX = Math.cos(ax), sX = Math.sin(ax), cY = Math.cos(ay), sY = Math.sin(ay);
+  [y, z] = [y * cX - z * sX, y * sX + z * cX];
+  [x, z] = [x * cY + z * sY, -x * sY + z * cY];
+  return [cx + x, cy + y, z / (r || 1)];
+}
+const talkGlow = () => (mode === 'speaking' ? level : 0);
+function hudArc(cx, cy, i, r, a0, a1, width, alpha) {
+  a1 = a0 + (a1 - a0) * hudSweep;                 // rings sweep in during boot
+  if (hudSweep <= 0) return;
+  const steps = Math.max(6, Math.ceil(Math.abs(a1 - a0) / TAU * 96));
+  ctx.lineWidth = width * DPR; ctx.strokeStyle = `rgba(255,196,64,${alpha})`;
+  ctx.beginPath();
+  for (let j = 0; j <= steps; j++) {
+    const [x, y] = hp(cx, cy, i, r, a0 + (a1 - a0) * j / steps);
+    j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+  // Glow halo when he talks: wide, soft strokes under the line, pulsing with his voice.
+  const g = talkGlow();
+  if (g > .03) {
+    ctx.strokeStyle = `rgba(255,190,60,${Math.min(1, alpha * g * .55)})`; ctx.lineWidth = (width + 5) * DPR; ctx.stroke();
+    ctx.strokeStyle = `rgba(255,170,40,${Math.min(1, alpha * g * .22)})`; ctx.lineWidth = (width + 14) * DPR; ctx.stroke();
+  }
+}
+function hudLine(cx, cy, i, r0, a0, r1, a1) {
+  const [x0, y0] = hp(cx, cy, i, r0, a0), [x1, y1] = hp(cx, cy, i, r1, a1);
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+}
+
+function drawHud(cx, cy, R, bright) {
+  stepScatter();
+  const k = .55 + bright * .45 + level * .6 + talkGlow() * .75;   // overall intensity, flares when he talks
+  // HUD sits just outside the orbit lines and always fits on screen.
+  const H = Math.min(R * (1 + burst * .5), Math.min(W, window.H) * .47 / 3.1);
+  ctx.save();
+  ctx.lineCap = 'butt';
+
+  // 1. thin inner circle + fine tick scale (slowly clockwise)
+  hudArc(cx, cy, 0, H * 2.25, 0, TAU, .7, .18 * k);
+  const rot1 = t * .05;
+  for (const bigOnes of [false, true]) {
+    ctx.lineWidth = (bigOnes ? 1.4 : .7) * DPR;
+    ctx.strokeStyle = `rgba(255,196,64,${(bigOnes ? .5 : .22) * k})`;
+    ctx.beginPath();
+    for (let i = 0; i < (lowPower ? 90 : 180) * hudSweep; i += lowPower ? 2 : 1) {
+      const major = i % 15 === 0;
+      if (major !== bigOnes) continue;
+      const a = rot1 + i / 180 * TAU, mid = i % 5 === 0;
+      const r0 = H * 2.33, r1 = r0 + H * (major ? .1 : mid ? .06 : .035);
+      const A = hp(cx, cy, 1, r0, a), B = hp(cx, cy, 1, r1, a);
+      ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]);
+    }
+    ctx.stroke();
+  }
+
+  // 2. thick arc segments (counter-clockwise)
+  const rot2 = -t * .11;
+  for (const [s, len, w] of [[0, 1.1, 5], [1.5, .35, 5], [2.2, .9, 5], [3.6, 1.6, 2.5], [5.5, .45, 5]])
+    hudArc(cx, cy, 2, H * 2.55, rot2 + s, rot2 + s + len, w, .32 * k);
+
+  // 3. dashed ring (clockwise, faster)
+  const rot3 = t * .18;
+  ctx.setLineDash([2 * DPR, 7 * DPR]);
+  hudArc(cx, cy, 3, H * 2.72, rot3, rot3 + TAU, 1.5, .35 * k);
+  ctx.setLineDash([]);
+
+  // 4. outer ring with gaps + triangle markers, 5. corner brackets
+  const rot4 = Math.sin(t * .07) * .3;
+  for (let q = 0; q < 4; q++) hudArc(cx, cy, 4, H * 2.92, rot4 + q * TAU / 4 + .12, rot4 + (q + 1) * TAU / 4 - .12, .9, .25 * k);
+  for (let q = 0; q < 4; q++) {
+    const a = rot4 + q * TAU / 4, r = H * 2.92, d = 5 * DPR / r;
+    const p1 = hp(cx, cy, 4, r + 7 * DPR, a), p2 = hp(cx, cy, 4, r - 3 * DPR, a + d), p3 = hp(cx, cy, 4, r - 3 * DPR, a - d);
+    ctx.fillStyle = `rgba(255,210,110,${.55 * k})`;
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.lineTo(p3[0], p3[1]); ctx.fill();
+  }
+  for (let q = 0; q < 4; q++) hudArc(cx, cy, 5, H * 3.1, q * TAU / 4 + TAU / 8 - .18, q * TAU / 4 + TAU / 8 + .18, 2, .3 * k);
+
+  // 6. circuit traces out to live readouts (fade away while the rings are scattered)
+  const traceAlpha = Math.max(0, 1 - scatter * 1.6) * Math.max(0, (boot - .8) / .2);
+  if (traceAlpha > .01) {
+    ctx.font = `${10 * DPR}px Consolas, monospace`;
+    traces.forEach((tr, i) => {
+      const r0 = H * 2.92, a = tr.a + rot4;               // ride along with the outer ring
+      const [x0, y0] = hp(cx, cy, 4, r0, a);
+      const x1 = cx + Math.cos(a) * (r0 + H * tr.out), y1 = cy + Math.sin(a) * (r0 + H * tr.out);
+      const dir = Math.cos(a) >= 0 ? 1 : -1;
+      const label = tr.label();
+      // Keep the readout on screen: shorten the trace if the label would be clipped.
+      const room = (label ? ctx.measureText(label).width : 0) + 22 * DPR;
+      let x2 = x1 + dir * H * tr.run * .6;
+      x2 = dir > 0 ? Math.min(x2, W - room) : Math.max(x2, room);
+      if ((x2 - x1) * dir < 6 * DPR) return;               // no space on this screen: skip this trace
+      const flick = (.75 + .25 * Math.sin(t * 2 + i * 1.7)) * traceAlpha;
+      ctx.lineWidth = .8 * DPR; ctx.strokeStyle = `rgba(255,196,64,${.28 * k * flick})`;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x2, y1); ctx.stroke();
+      ctx.fillStyle = `rgba(255,215,120,${.6 * k * flick})`;
+      ctx.beginPath(); ctx.arc(x2, y1, 2.5 * DPR, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x0, y0, 1.6 * DPR, 0, TAU); ctx.fill();
+      if (label) {
+        ctx.fillStyle = `rgba(255,196,64,${.5 * k * traceAlpha})`;
+        ctx.textAlign = dir > 0 ? 'left' : 'right';
+        ctx.fillText(label, x2 + dir * 8 * DPR, y1 + 3.5 * DPR);
+      }
+    });
+  }
+  ctx.restore();
+}
+
+/* ---------- Touch: drag = spin, pinch / scroll = resize, hold = expand, tap = talk, double-tap = go big ---------- */
+const pointers = new Map();
+let downAt = 0, moved = 0, holdTimer, pinchDist = 0, pinchZoom = 1, lastTap = 0;
+cv.addEventListener('pointerdown', (e) => {
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2) {
+    clearTimeout(holdTimer); burstTarget = 0; moved = 99;
+    const [a, b] = [...pointers.values()]; pinchDist = Math.hypot(a.x - b.x, a.y - b.y) || 1; pinchZoom = zoomTarget;
+    return;
+  }
+  dragging = true; downAt = performance.now(); moved = 0; vYaw = vPitch = 0;
+  holdTimer = setTimeout(() => { if (moved < 10) { burstTarget = 1; navigator.vibrate?.(15); } }, 320);
+});
+cv.addEventListener('pointermove', (e) => {
+  const p = pointers.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    zoomTarget = Math.max(.5, Math.min(3, pinchZoom * Math.hypot(a.x - b.x, a.y - b.y) / pinchDist));
+    return;
+  }
+  moved += Math.abs(dx) + Math.abs(dy);
+  if (moved > 10) { clearTimeout(holdTimer); beginSpin(); }
+  yaw += dx * .008; pitch += dy * .008; vYaw = dx * .008; vPitch = dy * .008;
+});
+function pointerEnd(e) {
+  if (!pointers.delete(e.pointerId) || pointers.size) return;
+  clearTimeout(holdTimer); dragging = false; endSpin();
+  const wasHold = burstTarget > 0; burstTarget = 0;
+  if (!wasHold && moved < 10 && performance.now() - downAt < 300) {
+    const now = performance.now();
+    if (now - lastTap < 320) { zoomTarget = zoomTarget > 1.4 ? 1 : 2.2; lastTap = 0; }
+    else { lastTap = now; setTimeout(() => { if (lastTap === now) tapOrb(); }, 320); }
+  }
+}
+cv.addEventListener('pointerup', pointerEnd);
+cv.addEventListener('pointercancel', pointerEnd);
+cv.addEventListener('wheel', (e) => { e.preventDefault(); zoomTarget = Math.max(.5, Math.min(3, zoomTarget * Math.exp(-e.deltaY * .0015))); }, { passive: false });
+
+
+/* ---------- UI helpers ---------- */
+const $state = document.getElementById('state'), $cap = document.getElementById('caption');
+function setMode(m, label) { mode = m; $state.textContent = label || m; }
+let capTimer;
+function caption(text, hold = 6000) { $cap.textContent = text; $cap.classList.add('on'); clearTimeout(capTimer); capTimer = setTimeout(() => $cap.classList.remove('on'), hold); }
+
+/* ---------- Voice out (neural voice streamed from /tts) ---------- */
+let actx, analyser, levelBuf;
+function audioGraph() {
+  if (actx) return;
+  actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 512;
+  levelBuf = new Uint8Array(analyser.fftSize); analyser.connect(actx.destination);
+}
+function audioLevel() {
+  if (!analyser) return .5;
+  analyser.getByteTimeDomainData(levelBuf);
+  let sum = 0; for (const v of levelBuf) sum += (v - 128) ** 2;
+  return Math.min(1, Math.sqrt(sum / levelBuf.length) / 28);
+}
+const speechQueue = []; let current = null, replyDone = true, dropRestOfReply = false, dropTimer = null;
+function speak(text) {
+  const a = new Audio('/tts?text=' + encodeURIComponent(text)); // starts downloading now
+  a.preload = 'auto'; a.dataset.text = text;
+  try { audioGraph(); actx.createMediaElementSource(a).connect(analyser); } catch {}
+  speechQueue.push(a); pump();
+}
+function pump() {
+  if (current) return;
+  if (!speechQueue.length) { if (replyDone && mode === 'speaking') afterReply(); return; }
+  current = speechQueue.shift(); setMode('speaking'); caption(current.dataset.text); pauseEars();
+  startedSpeakingAt ||= Date.now();
+  actx?.resume().then(nudge, nudge);
+  const next = () => { current = null; pump(); };
+  current.onended = next; current.onerror = next;
+  current.play().then(nudge).catch(() => { nudge(); next(); });
+}
+// If the browser still has the sound asleep, say so on screen instead of miming.
+function nudge() {
+  if (actx && actx.state !== 'running') caption('Click the orb once so I can speak out loud.', 6000);
+}
+window.__audio = () => ({ state: actx?.state, ctx: actx });   // for checking why he's gone quiet
+// Any real click or key press is permission enough to make sound.
+const wakeAudio = () => { audioGraph(); actx?.resume(); };
+addEventListener('pointerdown', wakeAudio);
+addEventListener('keydown', wakeAudio);
+addEventListener('touchstart', wakeAudio);
+function stopSpeaking() {
+  startedSpeakingAt = 0;
+  if (current) current.pause(); current = null;
+  speechQueue.forEach(a => a.src = ''); speechQueue.length = 0;
+}
+
+/* ---------- Brain link ---------- */
+let ws;
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/orb`);
+  ws.onopen = () => { if (!ringing) setMode('idle', inCall ? 'on call' : 'online'); window.vaultHello?.(); };
+  ws.onclose = () => { setMode('offline'); setTimeout(connect, 1500); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'sentence' && !dropRestOfReply) speak(m.text);
+    if (m.type === 'status' && !current && !dropRestOfReply) setMode('thinking', m.text);
+    if (m.type === 'done') { replyDone = true; dropRestOfReply = false; pump(); }
+    if (m.type === 'vault' || m.type === 'secret') window.vaultMessage?.(m);
+  };
+}
+connect();
+function send(text) {
+  if (!text.trim() || ws?.readyState !== 1) return;
+  if (current || !replyDone) ws.send(JSON.stringify({ type: 'interrupt' }));
+  stopSpeaking(); audioGraph(); dropRestOfReply = false; replyDone = false; caption(text, 4000); setMode('thinking');
+  ws.send(JSON.stringify({ type: 'say', text }));
+}
+function afterReply() { setMode('idle', inCall ? 'on call' : 'online'); awakeUntil = inCall ? Infinity : Date.now() + 12000; resumeEars(); }
+
+// While the voice panel is recording, he must neither answer nor talk: his own voice coming out of
+// the speakers would land in the microphone and end up inside your voiceprint.
+let earsMuted = false, unmuteTimer = null;
+window.__muteEars = (on) => {
+  earsMuted = !!on;
+  clearTimeout(unmuteTimer);
+  if (on) {
+    stopSpeaking(); replyDone = true; ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'interrupt' })); setMode('idle', 'listening to you');
+    // Belt and braces: whatever goes wrong in the voice panel, he gets his ears back.
+    unmuteTimer = setTimeout(() => { if (earsMuted) { earsMuted = false; setMode('idle', 'online'); caption('Listening again.', 2000); } }, 150000);
+  } else { setMode('idle', inCall ? 'on call' : 'online'); }
+};
+
+// Heard something — but was it you? If a voiceprint is set up, anyone else is ignored.
+let refusals = 0;
+async function mine(text) {
+  setMode('listening');
+  const v = await (window.__voiceCheck?.() ?? { ok: true });
+  console.log('[voiceid]', v);
+  if (!v.ok) {
+    // Being locked out of your own assistant is worse than a stranger getting a word in. If he keeps
+    // failing to recognise you, he stops filtering and says so, rather than silently ignoring you.
+    if (++refusals >= 3) {
+      refusals = 0;
+      setMode('idle', 'not your voice');
+      caption("That still isn't a voice I know. Type instead, or press V to switch voice recognition off.", 10000);
+      return;
+    }
+    setMode('idle', 'online');
+    caption(`That isn't a voice I know, sir. (${Math.round((v.score || 0) * 100)}% — press V to switch this off.)`, 4000);
+    return;
+  }
+  refusals = 0;
+  send(text);
+}
+
+// V turns voice recognition off and on, for when he's being stubborn.
+addEventListener('keydown', (e) => {
+  if (e.key?.toLowerCase() !== 'v' || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+  const st = window.__voiceid?.status();
+  if (!st?.enrolled) return;
+  const now = !st.enabled;
+  window.__voiceid.setEnabled(now);
+  caption(now ? 'Only answering to your voice.' : 'Answering to any voice for now.', 3000);
+});
+
+/* ---------- Voice in: always listening for "Mark" (and you can talk over him) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec, earsOn = false, awakeUntil = 0, cutIn = false;
+// "Mark" is an ordinary English word, unlike "Jarvis", so he only answers to it when he's actually being
+// addressed: at the start of what you say, or after a full stop, optionally after "hey" or "ok".
+// "That was a good mark" and "mark it down" leave him alone.
+const WAKE = /(?:^|[.!?]\s*)(?:hey\s+|ok(?:ay)?\s+)?mark\b/i;
+const busy = () => !!current || !replyDone;                   // he's thinking or talking
+
+// Waiting for you to finish, rather than pouncing on the first pause.
+let held = '', turnTimer = null;
+// Tune live from the console as __turnTuning: lower PAUSE if he feels slow, raise it if he cuts you off.
+const TURN = { PAUSE: 1100, THINKING: 2000 };                 // a breath, versus clearly mid-sentence
+window.__turnTuning = TURN;
+// Ending on one of these means more is coming, so give it longer.
+const UNFINISHED = /\b(and|but|so|because|or|with|to|for|the|a|an|my|your|of|in|on|at|if|when|that|is|was|um+|uh+|er+|like|then|i|we|it)$/i;
+function hold() {
+  clearTimeout(turnTimer);
+  const wait = UNFINISHED.test(held.replace(/[.,!?]+$/, '')) ? TURN.THINKING : TURN.PAUSE;
+  turnTimer = setTimeout(() => {
+    const whole = held.trim();
+    held = '';
+    if (whole.length > 1) mine(whole);
+  }, wait);
+}
+window.__turns = () => ({ held, waiting: !!turnTimer });
+const CUT_GRACE = 900;          // his own first words can't cut him off
+async function maybeCutIn() {
+  if (!busy() || Date.now() - startedSpeakingAt < CUT_GRACE) return;
+  const v = await (window.__voiceCheck?.() ?? { ok: true });
+  if (!v.ok) { console.log('[voiceid] ignored an interruption:', v); return; }   // the telly, or someone else
+  cutHimOff();
+}
+
+function cutHimOff() {
+  if (!busy()) return;
+  // The rest of the answer is already written and on its way down the wire. Telling the brain to
+  // stop isn't enough — we have to refuse whatever else arrives, or he carries on mid-thought.
+  dropRestOfReply = true;
+  clearTimeout(dropTimer);
+  dropTimer = setTimeout(() => (dropRestOfReply = false), 20000);   // never stay suppressed for good
+  stopSpeaking(); replyDone = true; cutIn = true;
+  ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'interrupt' }));
+  setMode('listening');
+}
+if (SR) {
+  rec = new SR(); rec.continuous = true; rec.interimResults = true; rec.lang = 'en-GB';
+  rec.onresult = (e) => {
+    if (earsMuted) return;          // while you're teaching him your voice, he listens but doesn't answer
+    const r = e.results[e.results.length - 1], said = r[0].transcript.trim();
+    const woke = WAKE.test(said);
+    const cmd = said.replace(/^.*?\bmark\b[,.!?]?\s*/i, '').trim();
+    const STOP = /^(stop|wait|enough|quiet|shut up|hold on|never mind|be quiet|that's enough|forget it|shush)[.!]?$/i;
+    const stopWord = STOP.test(said) || (woke && STOP.test(cmd));
+    // Interrupting him is deliberately hard to do by accident: it takes a finished phrase with your
+    // wake word (or a flat "stop"), a moment after he's started, and your voice rather than anyone's.
+    if (busy()) {
+      if (r.isFinal && (woke || stopWord)) maybeCutIn();
+      if (!woke) return;
+    }
+    // Mid-sentence counts as talking to him: you shouldn't have to say "Mark" again to finish a thought.
+    const awake = Date.now() < awakeUntil || cutIn || !!held;
+    if (woke || awake) {
+      if (mode === 'idle') setMode('listening');
+      target = .5 + Math.random() * .4;
+      if (!r.isFinal) { caption((held ? held + ' ' : '') + said, 3000); hold(); }   // still going: keep waiting
+    }
+    if (r.isFinal && (woke || awake)) {
+      cutIn = false;
+      if (stopWord) { held = ''; clearTimeout(turnTimer); caption('Stopped.', 1500); setMode('idle', 'online'); return; }
+      if (cmd.length > 1) { held = (held + ' ' + cmd).trim(); hold(); }
+      else if (!held) { awakeUntil = Date.now() + 10000; caption('Sir?'); }
+    }
+  };
+  rec.onspeechstart = () => window.__voiceMark?.();
+  rec.onspeechend = () => window.__voicePrepare?.();
+  rec.onstart = () => { earsLive = true; earsTrouble = 0; };
+  rec.onerror = (e) => {
+    lastEarsError = e.error;
+    // "not-allowed" usually means you really did block the microphone — but Chrome also throws it when
+    // something else grabs the mic, so try again a few times before believing it.
+    if ((e.error === 'not-allowed' || e.error === 'service-not-allowed') && ++earsTrouble >= 4) {
+      earsOn = false;
+      setMode('idle', 'mic blocked');
+      caption('I can\'t get to the microphone. Click the padlock in the address bar and allow it, then press Space.', 9000);
+    }
+  };
+  rec.onend = () => { earsLive = false; if (earsOn) setTimeout(startEars, Math.min(4000, 300 * 2 ** earsTrouble)); };
+}
+let earsLive = false, earsTrouble = 0, lastEarsError = null;
+function startEars() { if (!rec || !earsOn || earsLive) return; try { rec.start(); earsLive = true; } catch { earsLive = false; } }
+// If he's meant to be listening but isn't, start him again. This is what stops him going quietly deaf.
+setInterval(() => { if (earsOn && !earsLive) startEars(); }, 4000);
+// Something else just took the microphone (the voice check). Bounce recognition so it reattaches.
+window.__earsRestart = () => { earsTrouble = 0; if (!earsOn) { earsOn = true; setMode('idle', 'online'); } try { rec?.stop(); } catch {} setTimeout(startEars, 600); };
+window.__ears = () => ({ rec, on: earsOn, live: earsLive, muted: earsMuted, trouble: earsTrouble, lastError: lastEarsError });
+function resumeEars() { if (!rec || earsOn) return; earsOn = true; earsTrouble = 0; startEars(); }
+function pauseEars() { /* stays on: he keeps listening for "Mark" even while speaking */ }
+// Listen from the moment the page opens; if the browser wants a click first, the first click/key starts it.
+resumeEars();
+addEventListener('pointerdown', resumeEars, { once: true });
+addEventListener('keydown', resumeEars, { once: true });
+
+function tapOrb() { if (ringing) return answerCall(); audioGraph(); cutHimOff(); resumeEars(); awakeUntil = Date.now() + 10000; setMode('listening'); caption(rec ? 'Listening.' : 'Voice input needs Chrome or Edge.'); }
+addEventListener('keydown', (e) => { if (e.code === 'Space' && !/^(INPUT|TEXTAREA|BUTTON)$/.test(document.activeElement?.tagName)) { e.preventDefault(); tapOrb(); } });
+const $type = document.getElementById('type');
+$type.onkeydown = (e) => { if (e.key === 'Enter') { send($type.value); $type.value = ''; } };
+
+document.getElementById('call').onclick = async () => {
+  const r = await fetch('/call', { method: 'POST' }).then(r => r.json());
+  caption(r.error ? r.error : 'Ringing your phone, sir.');
+};
+
+/* ---------- Free phone calls: push "ring" + this page as the call screen ---------- */
+const isPC = ['localhost', '127.0.0.1'].includes(location.hostname);
+const $overlay = document.getElementById('overlay'), $ring = document.getElementById('ring'), $hangup = document.getElementById('hangup');
+let swReg = null, inCall = false, ringing = null;
+if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('/sw.js').then(r => { swReg = r; refreshBell(); });
+
+// PC: show a QR code that pairs your phone.
+const $pair = document.getElementById('pair');
+$pair.hidden = !isPC;
+$pair.onclick = async () => {
+  $overlay.innerHTML = '<p>OPENING A LINK FOR YOUR PHONE…</p>';
+  $overlay.hidden = false;
+  const r = await fetch('/pair').then((r) => r.json()).catch((e) => ({ error: e.message }));
+  $overlay.innerHTML = r.qr
+    ? `<div><img src="${r.qr}" alt="pairing code">
+         <p>SCAN WITH YOUR PHONE<br><span style="opacity:.6;letter-spacing:0">then tap the bell, bottom left, to let me ring you</span></p></div>`
+    : `<p>${r.error}</p>`;
+  $overlay.hidden = false;
+};
+$overlay.onclick = () => ($overlay.hidden = true);
+
+// Phone: one tap to let Mark ring this device.
+const $bell = document.getElementById('bell');
+async function refreshBell() {
+  const sub = await swReg?.pushManager.getSubscription();
+  $bell.hidden = isPC || !swReg || !!sub;
+}
+$bell.onclick = async () => {
+  if (await Notification.requestPermission() !== 'granted') return caption('Notifications are blocked for this site.');
+  const { key } = await fetch('/vapid').then(r => r.json());
+  const pad = '='.repeat((4 - key.length % 4) % 4), raw = atob((key + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  const sub = await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0)) });
+  await fetch('/subscribe', { method: 'POST', body: JSON.stringify(sub) });
+  refreshBell(); caption('Done. I can ring you on this phone now.');
+};
+
+// Opened from the "MARK is calling" notification.
+const callId = new URLSearchParams(location.search).get('call');
+if (callId !== null) { ringing = callId; $ring.hidden = false; setMode('listening', 'incoming'); navigator.vibrate?.([400, 200, 400]); }
+function answerCall() {
+  const id = ringing; ringing = null; $ring.hidden = true;
+  audioGraph(); actx.resume();
+  inCall = true; $hangup.hidden = false; awakeUntil = Infinity;
+  const go = () => ws.send(JSON.stringify({ type: 'answer', id }));
+  ws.readyState === 1 ? go() : ws.addEventListener('open', go, { once: true });
+  history.replaceState(null, '', '/');
+}
+$hangup.onclick = () => {
+  inCall = false; $hangup.hidden = true; awakeUntil = 0;
+  stopSpeaking(); pauseEars(); setMode('idle', 'online'); caption('Call ended.', 2500);
+};
+</script>
+<script src="/vendor/simplewebauthn/index.umd.min.js"></script>
+<script>
+/* ---------- Vault window + Windows Hello approvals ---------- */
+const $vaultBtn = document.getElementById('vaultBtn');
+$vaultBtn.onclick = () => window.open('/vault.html', 'mark-vault', 'width=560,height=840');
+const $approve = document.getElementById('approve');
+const postJson = (path, body) => fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+
+window.vaultHello = () => ws?.readyState === 1 && ws.send(JSON.stringify({ type: 'vault', op: 'status' }));
+window.vaultMessage = (m) => {
+  if (m.type === 'approve') return showApproval(m);
+  if (m.type === 'approval_done') { if ($approve.dataset.id === m.id) $approve.hidden = true; return; }
+  if (m.type === 'vault' && m.status) { vaultState = m.status; $vaultBtn.classList.toggle('on', !!m.status.unlocked); }
+  // He needs a password but the vault is shut. If your face can open it, just ask — no typing, no window.
+  if (m.type === 'vault' && m.needUnlock) {
+    if (vaultState?.helloUnlock && vaultState?.hello) askToOpenVault();
+    else {
+      caption('Your vault is locked — type your master password in the window that just opened.', 8000);
+      window.open('/vault.html', 'mark-vault', 'width=560,height=840');
+    }
+  }
+  if (m.helloUnlock) {
+    window.__prf.helloAssert(m.helloUnlock)
+      .then((r) => ws.send(JSON.stringify({ type: 'vault', op: 'hello_unlock', ...r })))
+      .catch((e) => { $approve.hidden = true; caption(e.name === 'NotAllowedError' ? 'Left it locked, then.' : e.message, 5000); });
+  }
+  if (m.note === 'Unlocked with Windows Hello.') { $approve.hidden = true; caption('Vault open, sir.', 3000); }
+};
+
+let vaultState = null;
+// A one-tap card: your face opens the vault and he carries on with what he was doing.
+function askToOpenVault() {
+  $approve.innerHTML = '';
+  $approve.dataset.id = 'vault-unlock';
+  const p = Object.assign(document.createElement('p'), { textContent: 'Your vault is locked. Open it?' });
+  const yes = Object.assign(document.createElement('button'), { textContent: 'Open with Windows Hello' });
+  const no = Object.assign(document.createElement('button'), { textContent: 'Not now', className: 'no' });
+  yes.onclick = () => { yes.disabled = true; yes.textContent = 'Look at the camera…'; ws.send(JSON.stringify({ type: 'vault', op: 'hello_unlock_options' })); };
+  no.onclick = () => ($approve.hidden = true);
+  $approve.append(p, yes, no);
+  $approve.hidden = false;
+}
+
+// Mark wants to use a password: confirm it's you with Windows Hello (or Face ID on a phone).
+function showApproval(m) {
+  const phone = /iPhone|iPad|Android/i.test(navigator.userAgent);
+  const note = Object.assign(document.createElement('small'), { textContent: m.popup ? 'A confirmation window also opened next to your browser.' : '' });
+  const yes = Object.assign(document.createElement('button'), { textContent: phone ? 'Approve with Face ID' : 'Approve with Windows Hello' });
+  const no = Object.assign(document.createElement('button'), { textContent: 'Deny', className: 'no' });
+  yes.onclick = () => approve(m.id, note);
+  no.onclick = () => postJson('/approval/deny', { id: m.id }).then(() => ($approve.hidden = true));
+  $approve.dataset.id = m.id;
+  $approve.replaceChildren(Object.assign(document.createElement('p'), { textContent: m.text }), yes, no, note);
+  $approve.hidden = false;
+}
+
+async function approve(id, note) {
+  try {
+    note.textContent = 'Look at your camera, or use your fingerprint or PIN…';
+    const optionsJSON = await postJson('/approval/options', { id });
+    if (optionsJSON.error) throw new Error(optionsJSON.error);
+    const response = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON });
+    const r = await postJson('/approval/verify', { id, response });
+    if (!r.ok) throw new Error(r.error || 'Not approved.');
+    $approve.hidden = true;
+  } catch (e) { note.textContent = e.name === 'NotAllowedError' ? 'Cancelled. Press Approve to try again.' : e.message; }
+}
+</script>
+<script src="/hello-prf.js"></script>
+<script type="module" src="/hand.js"></script>
+<script type="module">
+/* ---------- Only answer to your voice ---------- */
+import { init, isYou, prepare, enroll, forget, status, testMe, markSpeechStart } from '/voiceid.js';
+
+window.__voiceMark = markSpeechStart;
+window.__voiceCheck = isYou;
+window.__voicePrepare = prepare;
+const $btn = document.getElementById('voiceBtn');
+
+const paint = () => $btn.classList.toggle('on', status().enrolled);
+init().then(paint).catch(() => {});
+
+// A panel that walks you through reading three lines. Reuses the orb's own overlay styling.
+const $panel = Object.assign(document.createElement('div'), { id: 'voicepanel', hidden: true });
+$panel.style.cssText = `position:fixed;inset:auto 0 0 0;margin:0 auto 6vh;width:min(520px,88vw);z-index:60;
+  background:rgba(8,7,4,.94);border:1px solid rgba(255,196,64,.35);border-radius:14px;padding:22px 24px;
+  color:#ffd98a;font:15px/1.5 'Segoe UI',sans-serif;backdrop-filter:blur(6px);box-shadow:0 0 40px rgba(255,170,40,.12)`;
+document.body.append($panel);
+
+const show = (html) => { $panel.innerHTML = html; $panel.hidden = false; };
+let cancelled = false;
+const hide = () => { cancelled = true; $panel.hidden = true; };   // closing mid-way stops the recording too
+
+function intro() {
+  const s = status();
+  const learned = s.learned ? ` He has quietly picked up <b>${s.learned}</b> more since.` : '';
+  show(`<b style="font-size:17px">${s.enrolled ? 'Your voice is set up' : 'Teach Mark your voice'}</b>
+    <p style="opacity:.75;margin:10px 0 4px">${s.enrolled
+      ? `Learned from <b>${s.takes}</b> recordings on ${new Date(s.since).toLocaleDateString()}.${learned}
+         He only answers to you — other voices, the telly and anyone in the room get ignored.`
+      : 'Read eight short lines — about a minute. Say each one differently: normally, quietly, in a hurry. That range is what stops him missing you later.'}</p>
+    <p style="opacity:.5;font-size:13px;margin:0 0 16px">Your voice never leaves this machine and the recording isn't kept — only numbers describing it.
+      It's remembered for good, and he keeps learning as your voice changes. This ignores other people; it isn't a lock. Passwords still need your face or fingerprint.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button data-go style="flex:1;min-width:140px;padding:11px;border-radius:9px;border:1px solid rgba(255,196,64,.5);background:rgba(255,196,64,.14);color:#ffd98a;font:inherit;cursor:pointer">${s.enrolled ? 'Teach him again' : 'Start'}</button>
+      ${s.enrolled ? '<button data-test style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,196,64,.35);background:none;color:#ffd98a;font:inherit;cursor:pointer">Test it</button>' : ''}
+      ${s.enrolled ? '<button data-forget style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,120,80,.4);background:none;color:#ffab8a;font:inherit;cursor:pointer">Forget my voice</button>' : ''}
+      <button data-close style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,196,64,.25);background:none;color:#ffd98a;opacity:.7;font:inherit;cursor:pointer">Close</button>
+    </div>`);
+}
+
+const closeBtn = (label = 'Close') =>
+  `<button data-close style="padding:11px 18px;border-radius:9px;border:1px solid rgba(255,196,64,.5);background:rgba(255,196,64,.14);color:#ffd98a;font:inherit;cursor:pointer">${label}</button>`;
+
+const dots = (done, of) => Array.from({ length: of }, (_, i) =>
+  `<span style="display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:4px;background:rgba(255,196,64,${i < done ? '.9' : '.18'})"></span>`).join('');
+
+$panel.onclick = async (e) => {
+  if (e.target.closest('[data-close]')) return hide();
+  if (e.target.closest('[data-forget]')) { await forget(); paint(); return intro(); }
+
+  if (e.target.closest('[data-test]')) {
+    show(`<b style="font-size:17px">Say anything</b>
+      <p style="opacity:.7;margin:10px 0 16px">Talk normally for a few seconds and I'll tell you how well he knows you.</p>
+      <div data-count style="opacity:.6">Listening…</div>`);
+    window.__muteEars?.(true);
+    let r; try { r = await testMe(4); } finally { window.__muteEars?.(false); }
+    show(r.error ? `<p>${r.error}</p>${closeBtn()}`
+      : `<b style="font-size:17px">${r.score >= r.threshold ? 'That was you' : 'That did not match'}</b>
+         <p style="opacity:.75;margin:10px 0 6px">Match: <b>${(r.score * 100).toFixed(0)}%</b> — he needs ${(r.threshold * 100).toFixed(0)}% to answer.</p>
+         <p style="opacity:.5;font-size:13px;margin:0 0 16px">${r.score >= 0.7 ? 'Comfortably above the line.'
+            : r.score >= r.threshold ? 'Above the line, but not by much. Teaching him again in a quiet room would tighten it up.'
+            : 'Below the line, so he would have ignored that. Try again, or teach him again somewhere quieter.'}</p>
+         ${closeBtn()}`);
+    return;
+  }
+
+  if (!e.target.closest('[data-go]')) return;
+  cancelled = false;
+  window.__muteEars?.(true);
+  try {
+    const done = await enroll({
+      say: (phrase, how, n, of) => cancelled ? Promise.reject(new Error("cancelled")) : show(`<div style="opacity:.55;font-size:13px">Recording ${n} of ${of}</div>
+        <div style="margin:8px 0 12px">${dots(n - 1, of)}</div>
+        <div style="opacity:.7;font-size:13px;margin-bottom:6px">${how}</div>
+        <p style="font-size:20px;margin:0 0 18px;color:#ffe2a0">“${phrase}”</p>
+        <div data-count style="opacity:.6">Say it now…</div>`),
+      countdown: (left) => { const el = $panel.querySelector('[data-count]'); if (el) el.textContent = `Listening… ${left}`; },
+      captured: (n, of) => { const el = $panel.querySelector('[data-count]'); if (el) el.textContent = n < of ? `Got it. ${of - n} to go.` : 'Got it.'; },
+      note: (why) => { const el = $panel.querySelector('[data-count]'); if (el) { el.textContent = why; el.style.color = '#ffab8a'; } },
+    });
+    paint();
+    show(done
+      ? `<b style="font-size:17px">Done, sir.</b>
+         <p style="opacity:.75;margin:10px 0 6px">Learned from <b>${done.takes}</b> recordings${done.dropped ? `, ignoring ${done.dropped} that didn't match the rest` : ''}.
+           Confidence <b>${(done.confidence * 100).toFixed(0)}%</b>.</p>
+         <p style="opacity:.5;font-size:13px;margin:0 0 16px">Remembered for good, and he'll keep learning quietly as your voice changes.
+           From now on he ignores everyone else.</p>
+         ${closeBtn()}`
+      : `<b style="font-size:17px">Not saved</b>
+         <p style="opacity:.75;margin:10px 0 16px">Too much of that didn't sound like the same person — usually background noise. Nothing was changed.</p>
+         ${closeBtn()}`);
+  } catch (err) {
+    if (err.message !== "cancelled") show(`<p>Couldn't set that up: ${err.message}</p>${closeBtn()}`);
+  } finally {
+    window.__muteEars?.(false);
+  }
+};
+$btn.onclick = () => ($panel.hidden ? intro() : hide());
+</script>
+</body>
+</html>

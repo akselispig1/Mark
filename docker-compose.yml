@@ -1,0 +1,30 @@
+# Mark on a server: Node app + Caddy (automatic free HTTPS certificate).
+# Needs a .env next to this file (see deploy/aws.md). Start with: docker compose up -d --build
+services:
+  mark:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      TZ: Europe/Zurich
+    volumes:
+      - mark-data:/app/data           # memory, schedule, conversation id, pairing key, Telegram login, Whisper model
+      - mark-claude:/home/mark/.claude   # Claude sessions / settings / MCP config
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      JARVIS_DOMAIN: ${JARVIS_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [mark]
+
+volumes:
+  mark-data:
+  mark-claude:
+  caddy-data:
