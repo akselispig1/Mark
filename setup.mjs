@@ -44,7 +44,8 @@ const COPIES = [
 
 async function download({ to, from, what }) {
   const dest = path.join(V, to);
-  if (fs.existsSync(dest) && fs.statSync(dest).size > 1000) {
+  const enough = to.endsWith('.json') ? 10 : 100_000;     // a truncated model is worse than none
+  if (fs.existsSync(dest) && fs.statSync(dest).size >= enough) {
     console.log(`  already here  ${to}`);
     return;
   }
