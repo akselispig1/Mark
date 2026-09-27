@@ -3,6 +3,23 @@
 This file is kept up to date by the Claude Code session that checks
 [issue #1](https://github.com/akselispig1/Mark/issues/1) every hour and codes against it.
 
+## Update, later the same run: superseded by a direct fix on `main`
+
+While the PR below (`voiceid-embed-version-fix`, #2) was open, a commit landed directly on `main`
+(`c910575`, "voiceid: drop the ensemble, work the threshold out from your own voice") from the
+owner's own machine with real numbers: on his actual microphone, 19 of 28 pairs among his own eight
+enrolment recordings failed the 0.58 threshold after the ensemble change — he was locked out of his
+own assistant. That's a bigger problem than the version-mismatch this run's PR was built to fix: the
+ensemble method itself reads worse on real audio, not just against profiles enrolled before it
+existed. `c910575` drops the ensemble entirely and replaces the fixed threshold with one calculated
+per-owner from his own enrolment consistency (`bar()`).
+
+That supersedes everything below except the `trim()` fix, which is independent and still a real bug
+regardless of which embedding method is in use. Merged `main` into the PR branch and dropped the
+`embedVersion`/`embedForProfile`/`embedEnsemble` machinery — there's no second embedding method left
+to disambiguate, so keeping it would just be unused complexity. The PR now contains only the
+`trim()` fix described below.
+
 ## This run (2026-09-27, second run today)
 
 **Instruction from issue #1:** detailed review of the previous run's voice-recognition change
