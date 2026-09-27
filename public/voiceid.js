@@ -110,8 +110,14 @@ function trim(samples) {
   if (!rms.length) return new Float32Array(0);
   // A fan, traffic or the fridge sets a different floor in every room, so judge "quiet" against
   // this clip's own quietest fifth rather than one number that's wrong everywhere but a lab.
-  const floor = [...rms].sort((a, b) => a - b)[Math.floor(rms.length * 0.2)] || 0;
-  const cutoff = Math.max(T.SILENCE, floor * T.NOISE_MARGIN);
+  const sorted = [...rms].sort((a, b) => a - b);
+  const floor = sorted[Math.floor(rms.length * 0.2)] || 0;
+  // But if you talk right through with no pause at either end, that "quietest fifth" is just the
+  // softer moments of your own speech, not silence — and a margin on top of it can land above your
+  // actual voice, clipping words off the start and end. Only trust the margin when it still falls
+  // well short of what the clip typically sounds like; otherwise there's no real quiet to cut.
+  const typical = sorted[Math.floor(rms.length * 0.6)] || floor;
+  const cutoff = floor * T.NOISE_MARGIN < typical ? Math.max(T.SILENCE, floor * T.NOISE_MARGIN) : T.SILENCE;
   const loud = rms.map((v) => v > cutoff);
   let a = loud.indexOf(true), b = loud.lastIndexOf(true);
   if (a < 0) return new Float32Array(0);
