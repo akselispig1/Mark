@@ -37,6 +37,7 @@ What you can do:
 - Memory: when the user tells you something about themselves worth keeping (name, people, preferences, plans, routines, projects), call remember with one short fact. Don't announce it every time; a quick "noted" is enough. Use forget_memory when they ask you to forget something. If you don't know their name yet, ask for it once, naturally.
 - Autonomy: set_alarm for alarms and reminders; schedule_task to run a job for them later or on repeat (e.g. "every morning at seven check the weather and my emails", "every 30 minutes check if the website is up"). Scheduled jobs run on their own with full tools, even when nobody is talking to you. list_schedule and cancel_schedule manage them. Times are in ${schedule.TZ}.
 - Built-in tools (fast and exact, use them first): weather, trains (Swiss timetable), news, system_status, clipboard, media (volume, play/pause, skip), open (apps, websites, YouTube searches).
+- Documents: when they ask you to write something up — notes, a plan, a summary, a table, an essay — just make it with the Artifact tool and say it is done. Do not ask which sort they want and do not offer alternatives: pick the Artifact and get on with it. It is a real page they can open and share, it costs nothing beyond their Claude subscription, and the link appears on their screen by itself, so never read a web address aloud. Only use doc_create instead if they actually say "Google Doc" or "Drive".
 - Google: doc_create makes a real Google Doc in their Drive and gives you the link; doc_append, doc_read and drive_find do the rest. If Google isn't connected yet, say so in one sentence and tell them to say "connect Google" — don't write a file on disk and call it a Google Doc.
 - The user's own things: whats_open tells you what they're looking at right now — check it whenever they say "this" or "that" without saying what. find_file then read_document reads their actual PDFs, Word files and spreadsheets. recall searches every past conversation, so "what did I tell you about the car" has a real answer rather than a guess.
 - Your own browser (browse): a real Chrome of your own, separate from the user's. Use web search for quick facts, but use browse when you need to actually look at or use a website: something behind a login, a page search results can't reach, a form to fill, an order to check. Work in steps (go, parts, click, type) and say what you're seeing as you go. To sign in: browse to the login page, then call browser_login — that types the saved password for you, so never try to type a password yourself with browse. Banks, payment and checkout pages are the one place you don't go; say so plainly and let them do it.
@@ -281,8 +282,21 @@ export class VoiceSession {
   }
 
   #emit(name, arg) {
-    if (name === 'sentence') { arg = speakable(arg); if (!arg) return; this.spoke = true; transcript.log('mark', arg, this.channel); }
+    if (name === 'sentence') {
+      for (const url of String(arg).match(LINK) || []) this.#link(url, arg);
+      arg = speakable(arg); if (!arg) return;
+      this.spoke = true; transcript.log('mark', arg, this.channel);
+    }
     this.handlers[name]?.(arg);
+  }
+
+  /** Show a link on screen once, with whatever he called it. */
+  #link(url, context) {
+    this.seenLinks ||= new Set();
+    if (this.seenLinks.has(url)) return;
+    this.seenLinks.add(url);
+    const name = TITLE.exec(context)?.[1]?.trim();
+    this.handlers.link?.({ url, name: name || null });
   }
 
   #flush(force) {
@@ -311,6 +325,13 @@ export class VoiceSession {
         } else if (ev.type === 'message_stop') {
           this.#flush(true);
         }
+      } else if (msg.type === 'user' && Array.isArray(msg.message?.content)) {
+        // Whatever a tool just handed back — a published document's address lives in here.
+        for (const part of msg.message.content) {
+          const said = typeof part?.content === 'string' ? part.content
+            : Array.isArray(part?.content) ? part.content.map((c) => c.text || '').join(' ') : '';
+          for (const url of said.match(LINK) || []) this.#link(url, said);
+        }
       } else if (msg.type === 'result') {
         this.#flush(true);
         const failed = msg.is_error || msg.subtype !== 'success';
@@ -336,6 +357,11 @@ export class VoiceSession {
 }
 
 // Strip anything that shouldn't be read aloud (links, markdown, source lists).
+// Reading a URL out loud is useless, so speakable() removes them — but the link itself often *is*
+// the answer ("here's your document"). Catch them on the way past and put them on screen instead.
+const LINK = /https?:\/\/[^\s<>"')\]]+/g;
+const TITLE = /(?:called|titled|named)\s+["“']?([^"”'.!?\n]{2,60})/i;
+
 function speakable(s) {
   if (/^\s*(sources?|references?)\s*:/i.test(s)) return '';
   return s

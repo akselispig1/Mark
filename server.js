@@ -282,6 +282,7 @@ let active = null;
 const toActive = (o) => active?.readyState === 1 && active.send(JSON.stringify(o));
 orb.on({
   sentence: (text) => toActive({ type: 'sentence', text }),
+  link: (l) => toActive({ type: 'link', ...l }),
   status: (text) => toActive({ type: 'status', text }),
   done: () => toActive({ type: 'done' }),
 });
