@@ -3,7 +3,33 @@
 This file is kept up to date by the Claude Code session that checks
 [issue #1](https://github.com/akselispig1/Mark/issues/1) every hour and codes against it.
 
-## This run (2026-09-27)
+## This run (2026-09-27, later)
+
+No new instruction on issue #1 since the last reply there — nothing coded this run.
+
+**State of `main`, for context** (all landed from the owner's own machine since the last automated
+run, not from this bot):
+
+- `c910575` — dropped the ensemble embedding entirely and replaced the fixed 0.58 match threshold
+  with one calculated per-owner from his own enrolment consistency (`bar()`). This superseded the
+  `embedVersion` fix this bot had put up as PR #2.
+- `7d69095` — voice recognition (`public/voiceid*.js`) is switched off in the running app: it fought
+  the browser's own speech recognition for the microphone and cost more (Mark going silently deaf)
+  than it earned. The code and the enrolled voiceprint in `data/` are untouched; `npm run setup
+  -- --voice` fetches the speaker model again if it's switched back on. Windows Hello is unchanged
+  and remains the only real gate on secrets.
+- `ae827de` — real Google Docs support (`google.js`, OAuth via loopback redirect, `drive.file`
+  scope only, refresh token in `data/google.json`). Needs a Google OAuth client the owner creates
+  himself (README has the steps) via `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` in `.env`.
+- `3aa03ff` — Mark now knows he can write documents (the Artifact tool was already in his session;
+  the persona just didn't say so), and links in his speech/tool output now surface as a clickable
+  card on the orb instead of being silently stripped by `speakable()`.
+
+**PR #2** (`voiceid-embed-version-fix`, this bot's branch) is still open: just the `trim()` fix for
+clipping continuous speech, mergeable cleanly against current `main`, no CI configured on this repo,
+no review comments waiting on a reply. Left as-is pending the owner's own review/merge.
+
+## Earlier run (2026-09-27)
 
 **Instruction from issue #1:** "Can you improve the voice sensing and create a better recognition
 and only listen to the voice that has been learnt."
@@ -45,11 +71,19 @@ trusting the new thresholds blindly.
 
 ```
 npm install
-npm run setup                 :: downloads the voice + hand models (~93 MB), one-time
+npm run setup                 :: downloads the hand-tracking model, one-time (~7 MB)
+```
+
+Voice recognition (answering only to your voice) is switched off in the running app by default —
+skip this unless you're turning it back on:
+
+```
+npm run setup -- --voice       :: also fetches the ~86 MB speaker model
 ```
 
 Then put a Claude token in `.env` (copy `.env.example` first), on the `CLAUDE_CODE_OAUTH_TOKEN=`
-line. Get one by running `claude setup-token`.
+line. Get one by running `claude setup-token`. Everything else in `.env` (Twilio, Telegram, Alexa,
+Google Docs via `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`) is optional — see the README for setup.
 
 ```
 npm start                     :: starts the server
