@@ -618,22 +618,26 @@ const WAKE = /(?:^|[.!?]\s*)(?:hey\s+|ok(?:ay)?\s+)?mark\b/i;
 const busy = () => !!current || !replyDone;                   // he's thinking or talking
 
 // Waiting for you to finish, rather than pouncing on the first pause.
-let held = '', turnTimer = null;
+let held = '', turnTimer = null, speechActive = false;
 // Tune live from the console as __turnTuning: lower PAUSE if he feels slow, raise it if he cuts you off.
-const TURN = { PAUSE: 1100, THINKING: 2000 };                 // a breath, versus clearly mid-sentence
+const TURN = { PAUSE: 1500, THINKING: 2400 };                 // a breath, versus clearly mid-sentence
 window.__turnTuning = TURN;
 // Ending on one of these means more is coming, so give it longer.
 const UNFINISHED = /\b(and|but|so|because|or|with|to|for|the|a|an|my|your|of|in|on|at|if|when|that|is|was|um+|uh+|er+|like|then|i|we|it)$/i;
 function hold() {
   clearTimeout(turnTimer);
-  const wait = UNFINISHED.test(held.replace(/[.,!?]+$/, '')) ? TURN.THINKING : TURN.PAUSE;
+  // Still making noise? Then you're mid-thought, whatever Chrome decided to call "final".
+  const wait = speechActive ? TURN.THINKING
+    : UNFINISHED.test(held.replace(/[.,!?]+$/, '')) ? TURN.THINKING : TURN.PAUSE;
   turnTimer = setTimeout(() => {
     const whole = held.trim();
     held = '';
     if (whole.length > 1) mine(whole);
   }, wait);
 }
-window.__turns = () => ({ held, waiting: !!turnTimer });
+const heardLog = [];
+window.__turns = () => ({ held, waiting: !!turnTimer, speechActive });
+window.__heard = () => heardLog.slice(-40);          // the last 40 things he heard, and what he did
 const CUT_GRACE = 900;          // his own first words can't cut him off
 async function maybeCutIn() {
   if (!busy() || Date.now() - startedSpeakingAt < CUT_GRACE) return;
@@ -659,6 +663,7 @@ if (SR) {
     if (earsMuted) return;          // while you're teaching him your voice, he listens but doesn't answer
     const r = e.results[e.results.length - 1], said = r[0].transcript.trim();
     const woke = WAKE.test(said);
+    if (r.isFinal) heardLog.push({ at: new Date().toLocaleTimeString(), said, woke });
     const cmd = said.replace(/^.*?\bmark\b[,.!?]?\s*/i, '').trim();
     const STOP = /^(stop|wait|enough|quiet|shut up|hold on|never mind|be quiet|that's enough|forget it|shush)[.!]?$/i;
     const stopWord = STOP.test(said) || (woke && STOP.test(cmd));
@@ -682,8 +687,8 @@ if (SR) {
       else if (!held) { awakeUntil = Date.now() + 10000; caption('Sir?'); }
     }
   };
-  rec.onspeechstart = () => window.__voiceMark?.();
-  rec.onspeechend = () => window.__voicePrepare?.();
+  rec.onspeechstart = () => { speechActive = true; window.__voiceMark?.(); };
+  rec.onspeechend = () => { speechActive = false; if (held) hold(); window.__voicePrepare?.(); };
   rec.onstart = () => { earsLive = true; earsTrouble = 0; };
   rec.onerror = (e) => {
     lastEarsError = e.error;

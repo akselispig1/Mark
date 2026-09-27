@@ -10,7 +10,10 @@
 const SR16 = 16000;
 const BUFFER_SEC = 12;
 const T = {
-  MATCH: 0.58,        // how alike two voiceprints must be (you ≈ .73-.80, anyone else ≈ .10-.20)
+  MATCH: 0.58,        // fallback only; the real bar is worked out from your own recordings (see bar())
+  MARGIN: 0.12,       // how far below your own worst recording still counts as you
+  FLOOR: 0.42,        // never drop below this, however scrappy the enrolment was
+  CEIL: 0.62,         // nor climb above it, however tidy
   MIN_SEC: 0.75,      // shorter than this and there isn't enough voice to judge
   MAX_SEC: 4,         // longer than this and we just use the most recent part
   ENSEMBLE_SEC: 1.6,  // long enough to split in two and average, which steadies the reading
@@ -42,6 +45,21 @@ function ask(msg, transfer = []) {
   });
 }
 const cosine = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+
+/**
+ * The score you have to beat. Your own eight recordings never match each other perfectly — how
+ * closely they do is the best available measure of how consistent your voice is on your microphone,
+ * in your room. So the bar sits just under your *worst* pair rather than at a number picked in
+ * advance: a tidy enrolment gets a strict bar, a scrappy one a forgiving one, and neither locks you
+ * out of your own assistant.
+ */
+function bar() {
+  const c = profile?.core;
+  if (!c || c.length < 2) return T.MATCH;
+  let worst = 1;
+  for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) worst = Math.min(worst, cosine(c[i], c[j]));
+  return Math.min(T.CEIL, Math.max(T.FLOOR, worst - T.MARGIN));
+}
 
 /* ---------- microphone tap ---------- */
 async function startTap() {
@@ -100,27 +118,16 @@ function trim(samples) {
   return samples.subarray(Math.max(0, (a - 2) * win), Math.min(samples.length, (b + 3) * win));
 }
 
-/** A unit-length embedding, averaged from two overlapping halves when there's enough audio to
- *  spare. A cough or a door slamming in one half then gets outvoted instead of poisoning the
- *  whole reading, so a genuine sentence reads more steadily than a single embedding of it would. */
+/** One unit-length reading of a whole clip.
+ *  We tried averaging two overlapping halves to steady this out. Measured against the same audio it
+ *  made things worse, not better — shorter pieces give the model less to go on, so each half reads
+ *  noisier and averaging two noisy readings beats neither. Enrolment agreement fell from .64 to .53
+ *  on clean speech, and further on a real microphone, which locked the owner out of his own profile.
+ *  One embedding of the whole clip it is. */
 async function embedOf(samples) {
-  if (samples.length < SR16 * T.ENSEMBLE_SEC) {
-    const r = await ask({ type: 'embed', samples: Float32Array.from(samples) });
-    if (!r.ok) throw new Error(r.error);
-    return r.embedding;
-  }
-  const half = Math.floor(samples.length / 2);
-  const overlap = Math.floor(samples.length * 0.15);
-  const [ra, rb] = await Promise.all([
-    ask({ type: 'embed', samples: Float32Array.from(samples.subarray(0, half + overlap)) }),
-    ask({ type: 'embed', samples: Float32Array.from(samples.subarray(half - overlap)) }),
-  ]);
-  if (!ra.ok) throw new Error(ra.error);
-  if (!rb.ok) throw new Error(rb.error);
-  const sum = ra.embedding.map((x, i) => x + rb.embedding[i]);
-  let n = 0; for (const x of sum) n += x * x;
-  n = Math.sqrt(n) || 1;
-  return sum.map((x) => x / n);
+  const r = await ask({ type: 'embed', samples: Float32Array.from(samples) });
+  if (!r.ok) throw new Error(r.error);
+  return r.embedding;
 }
 
 async function voiceprintOf(ms) {
@@ -174,7 +181,7 @@ async function check() {
     };
     const vsCore = best(profile.core);                              // the sit-down recordings: the anchor
     const score = Math.max(vsCore, topFew(profile.learned, T.LEARN_TOPK));
-    const ok = score >= T.MATCH;
+    const ok = score >= bar();
     if (ok) {
       lastPass = Date.now();
       // Comfortably you, and judged against the original recordings rather than anything he taught
@@ -263,7 +270,7 @@ export async function testMe(seconds = 4) {
   const got = await voiceprintOf(seconds * 1000 + 300);
   if (got.short) return { error: "I didn't hear enough." };
   const all = [...profile.core, ...(profile.learned || [])];
-  return { score: Math.max(...all.map((p) => cosine(got.embedding, p))), threshold: T.MATCH };
+  return { score: Math.max(...all.map((p) => cosine(got.embedding, p))), threshold: bar() };
 }
 
 export async function forget() {
@@ -295,7 +302,7 @@ export async function init() {
 }
 
 window.__voiceid = {
-  status, isYou, prepare, forget, testMe, setEnabled, tuning: T,
+  status, isYou, prepare, forget, testMe, setEnabled, tuning: T, bar,
   // For testing without a microphone: push samples in, look at what comes back out.
   _feed: (chunk, hz = 16000) => { ring ||= new Float32Array(SR16 * BUFFER_SEC); rate = hz; write(chunk); },
   _recent: recent, _trim: trim, _state: () => ({ wIdx, filled, rate, len: ring?.length }),
