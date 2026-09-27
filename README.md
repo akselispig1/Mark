@@ -124,44 +124,17 @@ Two things catch people out:
 - A login with no website saved will be filled on *any* page, which throws away the fake-site protection.
   Check the imported ones have their site set.
 
-## Only answer to your voice
-Click the microphone button (top left of the orb, under the key) and read eight short lines — about a
-minute. Each one asks for a different delivery: normal, quiet, loud, hurried, slow. That range is what
-stops him missing you later when you are tired or across the room.
+## Only answer to your voice (off)
 
-Takes that don't sound like the rest (a cough, someone talking over you) are thrown out automatically,
-and it refuses to save if fewer than six survive — that means the room is too noisy.
+Mark can be taught to recognise one voice and ignore everyone else. It is **switched off**: it needs a
+second microphone stream, which competes with the browser for the microphone and made him go deaf more
+often than it kept anyone out.
 
-**It's remembered for good.** The profile lives in `data/voiceprint.json`, with a copy kept in
-`data/voiceprint.backup.json` every time it changes. It survives restarts, updates and reboots.
+The code is still here (`public/voiceid*.js`). To switch it back on: `npm run setup -- --voice` to fetch
+the model, then restore the module block in `public/index.html` from the git history before commit
+`REMOVED`. Your old voiceprint is untouched in `data/`.
 
-**And it keeps learning.** Whenever he recognises you comfortably he quietly files that away too, so he
-follows your voice through colds, new microphones and the years. Those extras are always judged against
-your original recordings, never against each other, so the profile can drift with you but never away
-from you. At most one new sample a minute, and 24 kept at a time.
-
-**Test it** in the same panel tells you your current match percentage. **Forget my voice** undoes everything.
-
-While the panel is recording he goes quiet and stops answering — otherwise he'd reply to the setup lines,
-and his own voice out of the speakers would end up inside your voiceprint. Closing the panel part-way
-cancels the recording and gives him his ears back.
-
-**This is a doorman, not a lock.** It is very good at ignoring other people and it is not proof of who
-you are — a recording of you could get past it. That's why passwords, and anything that costs money,
-still ask for your face or fingerprint through Windows Hello. Don't treat the voice as the security.
-
-He needs a 58% match to answer, where you normally score 73-80% and other people 10-20%. Nobody else gets
-in: not the telly, not a guest — and they can't interrupt him either. **Only your voice cuts him off
-mid-sentence.** A stranger saying "Mark, stop" is ignored, and so is his own voice coming back through
-the microphone. Interrupting also needs a finished phrase and a moment after he's started talking, so a
-stray word can't stop him by accident.
-
-He won't quietly give up and start answering everyone. If he keeps failing to recognise you he says so and
-leaves the door shut — you can always type instead, or press **V** to turn voice recognition off yourself.
-
-Odds and ends: very short replies ("yes", "stop") can't be judged on their own, so they're accepted for
-8 seconds after he's recognised you. If the model won't load at all he listens to everyone rather than
-locking you out; the microphone button stays lit when the voice lock is really on.
+None of this was ever the security. Passwords have always been gated by Windows Hello, which is unchanged.
 
 ## Mark's own browser
 He has a Chrome of his own, with its own profile in `data\browser` — separate from yours, with its own

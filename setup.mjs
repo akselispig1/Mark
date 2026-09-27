@@ -65,7 +65,7 @@ if (!fs.existsSync(path.join(ROOT, 'node_modules'))) {
   process.exit(1);
 }
 
-for (const [from, to] of COPIES) {
+for (const [from, to] of (process.argv.includes('--voice') ? COPIES : [])) {
   const src = path.join(ROOT, from), dest = path.join(V, to);
   if (!fs.existsSync(src)) { console.log(`  MISSING       ${from} — run npm install`); continue; }
   if (fs.existsSync(dest) && fs.statSync(dest).size === fs.statSync(src).size) { console.log(`  already here  ${to}`); continue; }
@@ -75,7 +75,8 @@ for (const [from, to] of COPIES) {
 }
 
 try {
-  for (const d of DOWNLOADS) await download(d);
+  // The speaker-recognition model is only needed if you switch that feature back on (see README).
+  for (const d of DOWNLOADS) { if (d.to.startsWith('voiceid/') && !process.argv.includes('--voice')) continue; await download(d); }
 } catch (e) {
   console.error(`\n  Download failed: ${e.message}`);
   console.error('  Check your connection and run "npm run setup" again.\n');

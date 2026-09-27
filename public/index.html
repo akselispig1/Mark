@@ -52,8 +52,6 @@
     border: 1px solid rgba(var(--gold), .22); background: #000; z-index: 2; }
   #vaultBtn { left: 22px; top: 22px; bottom: auto; }
   #vaultBtn.on { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .4); }
-  #voiceBtn { left: 22px; top: 70px; bottom: auto; }     /* under the key — the other "is this you?" control */
-  #voiceBtn.on { border-color: rgba(var(--gold), .8); color: rgb(var(--gold)); box-shadow: 0 0 18px rgba(var(--gold), .4); }
   #vault { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; background: rgba(0,0,0,.6); backdrop-filter: blur(8px); }
   .vcard { position: relative; width: min(440px, 92vw); max-height: 86vh; overflow: auto; padding: 26px 24px 20px;
     border: 1px solid rgba(var(--gold), .25); border-radius: 14px; background: rgba(12,10,4,.92); box-shadow: 0 0 60px rgba(var(--gold), .12); }
@@ -109,9 +107,6 @@
 </button>
 <button id="vaultBtn" class="corner" title="Password vault">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2M16 7l3 3M18.5 4.5l2 2"/></svg>
-</button>
-<button id="voiceBtn" class="corner" title="Teach Mark your voice (only you)">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8"/></svg>
 </button>
 <canvas id="handview" width="336" height="252" hidden></canvas>
 <div id="approve" hidden></div>
@@ -576,37 +571,9 @@ window.__muteEars = (on) => {
 };
 
 // Heard something — but was it you? If a voiceprint is set up, anyone else is ignored.
-let refusals = 0;
-async function mine(text) {
-  setMode('listening');
-  const v = await (window.__voiceCheck?.() ?? { ok: true });
-  console.log('[voiceid]', v);
-  if (!v.ok) {
-    // Being locked out of your own assistant is worse than a stranger getting a word in. If he keeps
-    // failing to recognise you, he stops filtering and says so, rather than silently ignoring you.
-    if (++refusals >= 3) {
-      refusals = 0;
-      setMode('idle', 'not your voice');
-      caption("That still isn't a voice I know. Type instead, or press V to switch voice recognition off.", 10000);
-      return;
-    }
-    setMode('idle', 'online');
-    caption(`That isn't a voice I know, sir. (${Math.round((v.score || 0) * 100)}% — press V to switch this off.)`, 4000);
-    return;
-  }
-  refusals = 0;
-  send(text);
-}
+function mine(text) { send(text); }
 
-// V turns voice recognition off and on, for when he's being stubborn.
-addEventListener('keydown', (e) => {
-  if (e.key?.toLowerCase() !== 'v' || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
-  const st = window.__voiceid?.status();
-  if (!st?.enrolled) return;
-  const now = !st.enabled;
-  window.__voiceid.setEnabled(now);
-  caption(now ? 'Only answering to your voice.' : 'Answering to any voice for now.', 3000);
-});
+
 
 /* ---------- Voice in: always listening for "Mark" (and you can talk over him) ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -639,10 +606,8 @@ const heardLog = [];
 window.__turns = () => ({ held, waiting: !!turnTimer, speechActive });
 window.__heard = () => heardLog.slice(-40);          // the last 40 things he heard, and what he did
 const CUT_GRACE = 900;          // his own first words can't cut him off
-async function maybeCutIn() {
+function maybeCutIn() {
   if (!busy() || Date.now() - startedSpeakingAt < CUT_GRACE) return;
-  const v = await (window.__voiceCheck?.() ?? { ok: true });
-  if (!v.ok) { console.log('[voiceid] ignored an interruption:', v); return; }   // the telly, or someone else
   cutHimOff();
 }
 
@@ -687,8 +652,8 @@ if (SR) {
       else if (!held) { awakeUntil = Date.now() + 10000; caption('Sir?'); }
     }
   };
-  rec.onspeechstart = () => { speechActive = true; window.__voiceMark?.(); };
-  rec.onspeechend = () => { speechActive = false; if (held) hold(); window.__voicePrepare?.(); };
+  rec.onspeechstart = () => { speechActive = true; };
+  rec.onspeechend = () => { speechActive = false; if (held) hold(); };
   rec.onstart = () => { earsLive = true; earsTrouble = 0; };
   rec.onerror = (e) => {
     lastEarsError = e.error;
@@ -848,105 +813,5 @@ async function approve(id, note) {
 </script>
 <script src="/hello-prf.js"></script>
 <script type="module" src="/hand.js"></script>
-<script type="module">
-/* ---------- Only answer to your voice ---------- */
-import { init, isYou, prepare, enroll, forget, status, testMe, markSpeechStart } from '/voiceid.js';
-
-window.__voiceMark = markSpeechStart;
-window.__voiceCheck = isYou;
-window.__voicePrepare = prepare;
-const $btn = document.getElementById('voiceBtn');
-
-const paint = () => $btn.classList.toggle('on', status().enrolled);
-init().then(paint).catch(() => {});
-
-// A panel that walks you through reading three lines. Reuses the orb's own overlay styling.
-const $panel = Object.assign(document.createElement('div'), { id: 'voicepanel', hidden: true });
-$panel.style.cssText = `position:fixed;inset:auto 0 0 0;margin:0 auto 6vh;width:min(520px,88vw);z-index:60;
-  background:rgba(8,7,4,.94);border:1px solid rgba(255,196,64,.35);border-radius:14px;padding:22px 24px;
-  color:#ffd98a;font:15px/1.5 'Segoe UI',sans-serif;backdrop-filter:blur(6px);box-shadow:0 0 40px rgba(255,170,40,.12)`;
-document.body.append($panel);
-
-const show = (html) => { $panel.innerHTML = html; $panel.hidden = false; };
-let cancelled = false;
-const hide = () => { cancelled = true; $panel.hidden = true; };   // closing mid-way stops the recording too
-
-function intro() {
-  const s = status();
-  const learned = s.learned ? ` He has quietly picked up <b>${s.learned}</b> more since.` : '';
-  show(`<b style="font-size:17px">${s.enrolled ? 'Your voice is set up' : 'Teach Mark your voice'}</b>
-    <p style="opacity:.75;margin:10px 0 4px">${s.enrolled
-      ? `Learned from <b>${s.takes}</b> recordings on ${new Date(s.since).toLocaleDateString()}.${learned}
-         He only answers to you — other voices, the telly and anyone in the room get ignored.`
-      : 'Read eight short lines — about a minute. Say each one differently: normally, quietly, in a hurry. That range is what stops him missing you later.'}</p>
-    <p style="opacity:.5;font-size:13px;margin:0 0 16px">Your voice never leaves this machine and the recording isn't kept — only numbers describing it.
-      It's remembered for good, and he keeps learning as your voice changes. This ignores other people; it isn't a lock. Passwords still need your face or fingerprint.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button data-go style="flex:1;min-width:140px;padding:11px;border-radius:9px;border:1px solid rgba(255,196,64,.5);background:rgba(255,196,64,.14);color:#ffd98a;font:inherit;cursor:pointer">${s.enrolled ? 'Teach him again' : 'Start'}</button>
-      ${s.enrolled ? '<button data-test style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,196,64,.35);background:none;color:#ffd98a;font:inherit;cursor:pointer">Test it</button>' : ''}
-      ${s.enrolled ? '<button data-forget style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,120,80,.4);background:none;color:#ffab8a;font:inherit;cursor:pointer">Forget my voice</button>' : ''}
-      <button data-close style="padding:11px 16px;border-radius:9px;border:1px solid rgba(255,196,64,.25);background:none;color:#ffd98a;opacity:.7;font:inherit;cursor:pointer">Close</button>
-    </div>`);
-}
-
-const closeBtn = (label = 'Close') =>
-  `<button data-close style="padding:11px 18px;border-radius:9px;border:1px solid rgba(255,196,64,.5);background:rgba(255,196,64,.14);color:#ffd98a;font:inherit;cursor:pointer">${label}</button>`;
-
-const dots = (done, of) => Array.from({ length: of }, (_, i) =>
-  `<span style="display:inline-block;width:18px;height:3px;border-radius:2px;margin-right:4px;background:rgba(255,196,64,${i < done ? '.9' : '.18'})"></span>`).join('');
-
-$panel.onclick = async (e) => {
-  if (e.target.closest('[data-close]')) return hide();
-  if (e.target.closest('[data-forget]')) { await forget(); paint(); return intro(); }
-
-  if (e.target.closest('[data-test]')) {
-    show(`<b style="font-size:17px">Say anything</b>
-      <p style="opacity:.7;margin:10px 0 16px">Talk normally for a few seconds and I'll tell you how well he knows you.</p>
-      <div data-count style="opacity:.6">Listening…</div>`);
-    window.__muteEars?.(true);
-    let r; try { r = await testMe(4); } finally { window.__muteEars?.(false); }
-    show(r.error ? `<p>${r.error}</p>${closeBtn()}`
-      : `<b style="font-size:17px">${r.score >= r.threshold ? 'That was you' : 'That did not match'}</b>
-         <p style="opacity:.75;margin:10px 0 6px">Match: <b>${(r.score * 100).toFixed(0)}%</b> — he needs ${(r.threshold * 100).toFixed(0)}% to answer.</p>
-         <p style="opacity:.5;font-size:13px;margin:0 0 16px">${r.score >= 0.7 ? 'Comfortably above the line.'
-            : r.score >= r.threshold ? 'Above the line, but not by much. Teaching him again in a quiet room would tighten it up.'
-            : 'Below the line, so he would have ignored that. Try again, or teach him again somewhere quieter.'}</p>
-         ${closeBtn()}`);
-    return;
-  }
-
-  if (!e.target.closest('[data-go]')) return;
-  cancelled = false;
-  window.__muteEars?.(true);
-  try {
-    const done = await enroll({
-      say: (phrase, how, n, of) => cancelled ? Promise.reject(new Error("cancelled")) : show(`<div style="opacity:.55;font-size:13px">Recording ${n} of ${of}</div>
-        <div style="margin:8px 0 12px">${dots(n - 1, of)}</div>
-        <div style="opacity:.7;font-size:13px;margin-bottom:6px">${how}</div>
-        <p style="font-size:20px;margin:0 0 18px;color:#ffe2a0">“${phrase}”</p>
-        <div data-count style="opacity:.6">Say it now…</div>`),
-      countdown: (left) => { const el = $panel.querySelector('[data-count]'); if (el) el.textContent = `Listening… ${left}`; },
-      captured: (n, of) => { const el = $panel.querySelector('[data-count]'); if (el) el.textContent = n < of ? `Got it. ${of - n} to go.` : 'Got it.'; },
-      note: (why) => { const el = $panel.querySelector('[data-count]'); if (el) { el.textContent = why; el.style.color = '#ffab8a'; } },
-    });
-    paint();
-    show(done
-      ? `<b style="font-size:17px">Done, sir.</b>
-         <p style="opacity:.75;margin:10px 0 6px">Learned from <b>${done.takes}</b> recordings${done.dropped ? `, ignoring ${done.dropped} that didn't match the rest` : ''}.
-           Confidence <b>${(done.confidence * 100).toFixed(0)}%</b>.</p>
-         <p style="opacity:.5;font-size:13px;margin:0 0 16px">Remembered for good, and he'll keep learning quietly as your voice changes.
-           From now on he ignores everyone else.</p>
-         ${closeBtn()}`
-      : `<b style="font-size:17px">Not saved</b>
-         <p style="opacity:.75;margin:10px 0 16px">Too much of that didn't sound like the same person — usually background noise. Nothing was changed.</p>
-         ${closeBtn()}`);
-  } catch (err) {
-    if (err.message !== "cancelled") show(`<p>Couldn't set that up: ${err.message}</p>${closeBtn()}`);
-  } finally {
-    window.__muteEars?.(false);
-  }
-};
-$btn.onclick = () => ($panel.hidden ? intro() : hide());
-</script>
 </body>
 </html>
