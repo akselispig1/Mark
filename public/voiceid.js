@@ -92,23 +92,40 @@ function trim(samples) {
   if (!rms.length) return new Float32Array(0);
   // A fan, traffic or the fridge sets a different floor in every room, so judge "quiet" against
   // this clip's own quietest fifth rather than one number that's wrong everywhere but a lab.
-  const floor = [...rms].sort((a, b) => a - b)[Math.floor(rms.length * 0.2)] || 0;
-  const cutoff = Math.max(T.SILENCE, floor * T.NOISE_MARGIN);
+  const sorted = [...rms].sort((a, b) => a - b);
+  const floor = sorted[Math.floor(rms.length * 0.2)] || 0;
+  // But if you talk right through with no pause at either end, that "quietest fifth" is just the
+  // softer moments of your own speech, not silence — and a margin on top of it can land above your
+  // actual voice, clipping words off the start and end. Only trust the margin when it still falls
+  // well short of what the clip typically sounds like; otherwise there's no real quiet to cut.
+  const typical = sorted[Math.floor(rms.length * 0.6)] || floor;
+  const cutoff = floor * T.NOISE_MARGIN < typical ? Math.max(T.SILENCE, floor * T.NOISE_MARGIN) : T.SILENCE;
   const loud = rms.map((v) => v > cutoff);
   let a = loud.indexOf(true), b = loud.lastIndexOf(true);
   if (a < 0) return new Float32Array(0);
   return samples.subarray(Math.max(0, (a - 2) * win), Math.min(samples.length, (b + 3) * win));
 }
 
+// Embeddings changed shape once: the original method embeds a clip in one pass, the newer one
+// averages two overlapping halves (steadier, but a different ruler). A profile is only safe to
+// compare against with the method it was *enrolled* with, so every profile carries the version it
+// was made with, and a live check picks its embedding method to match rather than always using the
+// newest one. EMBED_VERSION is what enroll() stamps new profiles with; go via embedForProfile().
+const EMBED_VERSION = 2;
+
+/** A unit-length embedding of the whole clip in one pass — the original method, and still what a
+ *  live check uses against a profile enrolled before the ensemble method existed. */
+async function embedSingle(samples) {
+  const r = await ask({ type: 'embed', samples: Float32Array.from(samples) });
+  if (!r.ok) throw new Error(r.error);
+  return r.embedding;
+}
+
 /** A unit-length embedding, averaged from two overlapping halves when there's enough audio to
  *  spare. A cough or a door slamming in one half then gets outvoted instead of poisoning the
  *  whole reading, so a genuine sentence reads more steadily than a single embedding of it would. */
-async function embedOf(samples) {
-  if (samples.length < SR16 * T.ENSEMBLE_SEC) {
-    const r = await ask({ type: 'embed', samples: Float32Array.from(samples) });
-    if (!r.ok) throw new Error(r.error);
-    return r.embedding;
-  }
+async function embedEnsemble(samples) {
+  if (samples.length < SR16 * T.ENSEMBLE_SEC) return embedSingle(samples);
   const half = Math.floor(samples.length / 2);
   const overlap = Math.floor(samples.length * 0.15);
   const [ra, rb] = await Promise.all([
@@ -123,11 +140,14 @@ async function embedOf(samples) {
   return sum.map((x) => x / n);
 }
 
-async function voiceprintOf(ms) {
+/** Which embedding method matches how the current profile was enrolled. */
+const embedForProfile = () => (profile?.embedVersion === EMBED_VERSION ? embedEnsemble : embedSingle);
+
+async function voiceprintOf(ms, embed) {
   const clip = trim(recent(ms));
   if (clip.length < SR16 * T.MIN_SEC) return { short: true, seconds: clip.length / SR16 };
   const use = clip.length > SR16 * T.MAX_SEC ? clip.subarray(clip.length - SR16 * T.MAX_SEC) : clip;
-  const embedding = await embedOf(use);
+  const embedding = await embed(use);
   return { embedding, seconds: use.length / SR16 };
 }
 
@@ -157,7 +177,7 @@ async function check() {
   if (!enabled || !profile?.core?.length || !ring) return { ok: true, why: 'not set up' };
   const span = Math.min(T.MAX_SEC * 1000 + 500, Math.max(1200, Date.now() - (speechStart || Date.now() - 3000) + 400));
   try {
-    const got = await voiceprintOf(span);
+    const got = await voiceprintOf(span, embedForProfile());
     if (got.short) {
       const recently = Date.now() - lastPass < T.GRACE_MS;   // "yes", "stop" — too short to judge alone
       return { ok: recently, why: recently ? 'short, but you just spoke' : 'too short to recognise' };
@@ -218,7 +238,7 @@ export async function enroll(ui) {
     const t = TAKES[i];
     await ui.say(t.say, t.how, takes.length + 1, TAKES.length);
     for (let left = SECONDS; left > 0; left--) { ui.countdown(left); await new Promise((r) => setTimeout(r, 1000)); }
-    const got = await voiceprintOf(SECONDS * 1000 + 400);
+    const got = await voiceprintOf(SECONDS * 1000 + 400, embedEnsemble);
     if (got.short) {
       if (++retries > 6) throw new Error("I'm not hearing anything. Check the microphone is on and allowed, then try again.");
       ui.note(got.seconds < 0.2 ? "I didn't hear anything that time — is the microphone on?" : 'Not quite enough — say the whole line.');
@@ -248,10 +268,10 @@ export async function enroll(ui) {
   const confidence = good.reduce((s, x) => s + x.agrees, 0) / good.length;
   const saved = await fetch('/voiceprint', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ core: kept, confidence }),
+    body: JSON.stringify({ core: kept, confidence, embedVersion: EMBED_VERSION }),
   });
   if (!saved.ok) throw new Error('could not save your voiceprint — is Mark running?');
-  profile = { core: kept, learned: [], created: Date.now(), confidence };
+  profile = { core: kept, learned: [], created: Date.now(), confidence, embedVersion: EMBED_VERSION };
   return { takes: kept.length, dropped, confidence };
 }
 
@@ -260,7 +280,7 @@ export async function testMe(seconds = 4) {
   if (!profile?.core?.length) return { error: 'Nothing learned yet.' };
   await startTap();
   await new Promise((r) => setTimeout(r, seconds * 1000));
-  const got = await voiceprintOf(seconds * 1000 + 300);
+  const got = await voiceprintOf(seconds * 1000 + 300, embedForProfile());
   if (got.short) return { error: "I didn't hear enough." };
   const all = [...profile.core, ...(profile.learned || [])];
   return { score: Math.max(...all.map((p) => cosine(got.embedding, p))), threshold: T.MATCH };
@@ -279,6 +299,9 @@ export const status = () => ({
   learned: profile?.learned?.length || 0,
   samples: profile?.samples || profile?.core?.length || 0,
   confidence: profile?.confidence ?? null,
+  // Enrolled before the steadier ensemble embedding existed — still recognised fine, just on the
+  // older matching method. Teaching him again moves it onto the current one.
+  outdated: !!profile?.core?.length && profile.embedVersion !== EMBED_VERSION,
 });
 export const setEnabled = (v) => (enabled = !!v);
 
@@ -299,4 +322,7 @@ window.__voiceid = {
   // For testing without a microphone: push samples in, look at what comes back out.
   _feed: (chunk, hz = 16000) => { ring ||= new Float32Array(SR16 * BUFFER_SEC); rate = hz; write(chunk); },
   _recent: recent, _trim: trim, _state: () => ({ wIdx, filled, rate, len: ring?.length }),
+  // For measuring the two embedding methods against each other, e.g. old vs. new against a saved
+  // profile — the same comparison worth re-running before trusting a threshold.
+  _embedSingle: embedSingle, _embedEnsemble: embedEnsemble, _embedForProfile: embedForProfile,
 };

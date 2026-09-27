@@ -869,11 +869,15 @@ const hide = () => { cancelled = true; $panel.hidden = true; };   // closing mid
 function intro() {
   const s = status();
   const learned = s.learned ? ` He has quietly picked up <b>${s.learned}</b> more since.` : '';
+  const outdated = s.enrolled && s.outdated
+    ? `<p style="opacity:.65;font-size:13px;margin:8px 0 0;color:#ffd98a">He's since learned a steadier way to
+         read a voice. Teaching him again isn't required — he still knows you fine — but it moves you onto it.</p>`
+    : '';
   show(`<b style="font-size:17px">${s.enrolled ? 'Your voice is set up' : 'Teach Mark your voice'}</b>
     <p style="opacity:.75;margin:10px 0 4px">${s.enrolled
       ? `Learned from <b>${s.takes}</b> recordings on ${new Date(s.since).toLocaleDateString()}.${learned}
          He only answers to you — other voices, the telly and anyone in the room get ignored.`
-      : 'Read eight short lines — about a minute. Say each one differently: normally, quietly, in a hurry. That range is what stops him missing you later.'}</p>
+      : 'Read eight short lines — about a minute. Say each one differently: normally, quietly, in a hurry. That range is what stops him missing you later.'}</p>${outdated}
     <p style="opacity:.5;font-size:13px;margin:0 0 16px">Your voice never leaves this machine and the recording isn't kept — only numbers describing it.
       It's remembered for good, and he keeps learning as your voice changes. This ignores other people; it isn't a lock. Passwords still need your face or fingerprint.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">

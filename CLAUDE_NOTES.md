@@ -3,43 +3,76 @@
 This file is kept up to date by the Claude Code session that checks
 [issue #1](https://github.com/akselispig1/Mark/issues/1) every hour and codes against it.
 
-## This run (2026-09-27)
+## This run (2026-09-27, second run today)
 
-**Instruction from issue #1:** "Can you improve the voice sensing and create a better recognition
-and only listen to the voice that has been learnt."
+**Instruction from issue #1:** detailed review of the previous run's voice-recognition change
+(`1f3bb30`) — a real bug in it, a smaller thing worth a look, and a new working agreement:
+branch + pull request instead of pushing straight to `main` from now on. This run follows that
+new agreement: the work is on a branch, opened as a PR, not pushed to `main` directly.
 
-**What changed**, all in `public/voiceid.js` (no other files touched):
+### The bug: checks were measured with a different ruler than the profile they're judged against
 
-- **Adaptive noise floor.** `trim()` used to cut anything quieter than one fixed number. It now
-  measures each clip's own quietest stretches and trims relative to that, so a noisy room (fan,
-  traffic, a TV) doesn't leave background hiss inside the voiceprint, and a very quiet room doesn't
-  get over-trimmed.
-- **Ensemble embeddings.** Any clip long enough to spare (~1.6s or more — which is every enrollment
-  take, and most live utterances) is now split into two overlapping halves, embedded separately, and
-  averaged into one steadier reading. A cough or a door slamming in one half no longer skews the
-  whole voiceprint the way a single embedding of it would. This improves both the quality of the
-  eight enrollment recordings and every live recognition check.
-- **Stricter matching against the learned pool.** Recognition used to accept if you matched *any
-  single* sample he'd picked up since enrollment — one drifted or mislearned sample was all it took.
-  It now averages your best couple of matches from that pool (`LEARN_TOPK = 2`) instead of just the
-  luckiest one, so only-you-recognised stays true even as the learned pool grows. The original
-  sit-down recordings (`core`) are unchanged: they're deliberate, so they're still judged by their
-  single best match.
+`embedOf()` (from the last run) always averaged two overlapping halves for *any* clip long enough
+— both at enrollment and at every live check. But the owner's profile on disk was enrolled the old
+way, one embedding of the whole clip. Comparing an ensemble-embedded live check against a
+single-embedded stored profile measurably shrinks the genuine-speaker margin (the issue measured
+it: ~0.043 → ~0.016 against the 0.58 threshold, using this machine's own numbers) without shrinking
+the impostor score to match — worst case, the owner gets told his own voice isn't his.
 
-Nothing about the doorman/lock model changed: voice recognition still fails open (a broken model
-never locks the owner out — CLAUDE.md rule), Windows Hello still gates every actual secret, and no
-password ever reaches the model. This was purely about making the "was that you?" check more
-accurate.
+**Fix, all in `public/voiceid.js`, `server.js`, and `store.js`:**
 
-**Not done / left alone:** the grace window after a recognised utterance (`GRACE_MS`, currently 8s)
-still accepts *any* short follow-up ("yes", "stop") without a fresh voice check — that's existing,
-deliberate behaviour, not something the issue asked to change, and tightening it risks locking the
-owner out mid-conversation. Flagged here in case a future instruction wants it revisited.
+- Split the single embedding function into `embedSingle()` (the original, one pass) and
+  `embedEnsemble()` (the averaged-halves version added last run).
+- Every profile now carries `embedVersion`. Enrollment always uses `embedEnsemble()` and stamps
+  the new profile `embedVersion: 2`. A live check (and `testMe()`) picks whichever method matches
+  the *current* profile's version via `embedForProfile()` — so a profile enrolled the old way keeps
+  being checked the old way, and only a freshly re-enrolled profile gets the newer, steadier method.
+- `store.js`: bumped `VERSION` to 2. The migration stamps any existing `data/voiceprint.json` that
+  has no `embedVersion` with `embedVersion: 1`, so the format is explicit on disk rather than
+  inferred. It runs once, is safe to run twice, and — like every migration — backs up `data/` first.
+- `public/index.html`: when a profile is enrolled but not yet on `embedVersion: 2`, the voice panel
+  now says so and that re-recording (optional) would move it onto the newer method. Nothing is
+  forced — the old path still recognises the owner fine, per the bug above.
+- `server.js`'s voiceprint save now stores whatever `embedVersion` the client sends (defaulting to
+  `1` if omitted, e.g. from an older client), and the comment above that route was updated to say
+  the field must never be inferred or defaulted away by a future change.
 
-**Testing:** `node --check` passes on every touched/adjacent file. This is browser-only code (mic,
-AudioWorklet, WebGPU/WASM) with no model files or browser available in this build environment, so it
-could not be exercised live this run — worth a real enrol/recognise pass on a PC with a mic before
-trusting the new thresholds blindly.
+**Verified without a mic** (matching the issue's own "how to verify" section): ran the
+version-routing logic (`embedForProfile`) standalone — a profile with no `embedVersion` or with
+`embedVersion: 1` routes to `embedSingle`, only `embedVersion: 2` routes to `embedEnsemble` — and
+ran the `store.js` migration against a simulated `data/` directory twice to confirm it's idempotent
+and stamps correctly. `node --check` passes on every touched file, including the inline `<script>`
+blocks in `public/index.html`.
+
+### The smaller thing: `trim()` could clip real speech, not just silence
+
+Flagged in the issue: if you talk right through a clip with no pause at either end, the 20th
+percentile of loudness is just the quieter moments of your own speech, not silence — and the
+`NOISE_MARGIN` multiplier on top of it can land *above* your actual voice, which strips real words
+off the start and end instead of just the gaps.
+
+Reproduced it with a synthetic 4s clip of continuous speech-like amplitude (no zero regions): the
+old `trim()` dropped ~0.26s off the ends. Fixed by only trusting the noise-margin cutoff when it's
+still clearly below what the clip typically sounds like (its 60th percentile); otherwise there's no
+real quiet to cut, so it falls back to the absolute `SILENCE` floor only. Re-ran the same synthetic
+test — continuous speech now keeps its full length, and a normal silence-speech-silence clip trims
+exactly as before (verified byte-for-byte identical output on that case). Script used for both is
+disposable and wasn't committed.
+
+### Left alone
+
+- The grace window (`GRACE_MS`) — the issue said to leave it for now.
+- Dropping the ensemble outright (the "simpler" option in the issue) — went with the preferred,
+  versioned option instead, since it keeps the accuracy improvement rather than reverting it.
+
+**Not done / couldn't test:** still no microphone or browser in this build environment, so no live
+enrol/recognise pass — worth doing on the owner's PC before trusting the new thresholds blindly,
+same caveat as last run.
+
+## Working agreement, starting this run
+
+Per the issue: **changes now go on a branch and open as a pull request**, not pushed to `main`
+directly. `main` stays whatever's already been reviewed and merged.
 
 ## How to run Mark locally on Windows
 
