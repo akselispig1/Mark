@@ -2,8 +2,7 @@
 
 A voice assistant that runs on your own machine. A glowing orb you talk to: he has shell and file
 access, his own browser, your passwords (which he can use but never see), permanent memory, alarms,
-and he can ring your phone. His brain is the Claude Agent SDK, so he also gets web search and every
-MCP server in your Claude Code config.
+and he can ring your phone. His brain is the Claude Agent SDK, so he also gets web search.
 
 He only answers *your* voice, and anything involving a password asks for your face or fingerprint.
 
@@ -167,6 +166,38 @@ screen itself.
 **Every conversation, searchable.** Everything said is written to `data/transcript/YYYY-MM-DD.jsonl`, and
 `recall` searches it. "What did I tell you about the car?" now has a real answer instead of a guess,
 months later and across restarts. Plain text you can read or delete yourself; delete the folder to wipe it.
+
+## Real Google Docs
+
+Ask for a document — "Mark, make me a doc of tonight's revision plan" — and he creates an actual
+Google Doc in your Drive and gives you the link. Also `doc_append`, `doc_read` and `drive_find`.
+
+Google ties API access to a project that belongs to you, so this bit can't be done for you. It's about
+ten clicks, once:
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and make a project (any name).
+2. **APIs & Services → Library**: enable **Google Docs API** and **Google Drive API**.
+3. **APIs & Services → OAuth consent screen**: External, fill in the app name and your email, and add
+   yourself under **Test users**. You don't need to publish it.
+4. **Credentials → Create credentials → OAuth client ID → Web application**.
+   Under *Authorised redirect URIs* add exactly:
+   ```
+   http://localhost:7777/google/callback
+   ```
+5. Copy the client ID and secret into `.env`:
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   ```
+6. Restart Mark, open <http://localhost:7777/google/connect>, and approve. That's it — he tells you
+   when it's done.
+
+He only ever gets the `drive.file` scope, which means **the files he creates and nothing else**. He
+cannot see the rest of your Drive. The sign-in token is kept in `data/google.json`, same standing as
+your Claude token in `.env`, and never leaves the machine. Say "disconnect Google" to revoke it, or
+remove the app at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+On a server, set `PUBLIC_URL` and add that address's `/google/callback` to the same list in step 4.
 
 ## Codes emailed to you (Gmail)
 1. Turn on 2-Step Verification for your Google account, then make an app password at myaccount.google.com/apppasswords (name it "Mark").

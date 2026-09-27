@@ -22,6 +22,7 @@ const vault = await import('./vault.js');
 const hello = await import('./hello.js');
 const mail = await import('./mailcodes.js');
 const alexa = await import('./alexa.js');
+const google = await import('./google.js');
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 7777);
@@ -139,6 +140,28 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ qr: await QRCode.toDataURL(link, { margin: 1, width: 320, color: { dark: '#ffc440', light: '#000000' } }), link }));
     } catch (e) {
       res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+  // Connecting Google: one click, then the token lives in data/google.json.
+  if (url.pathname === '/google/connect') {
+    try {
+      const back = `${process.env.PUBLIC_URL || `http://localhost:${PORT}`}/google/callback`;
+      res.writeHead(302, { location: google.authLink(back) }).end();
+    } catch (e) { res.writeHead(400, { 'content-type': 'text/plain' }).end(e.message); }
+    return;
+  }
+  if (url.pathname === '/google/callback') {
+    const page = (msg) => `<!doctype html><meta charset=utf-8><title>Mark</title>
+      <body style="background:#070602;color:#ffd98a;font:16px/1.6 'Segoe UI',sans-serif;display:grid;place-items:center;height:100vh;margin:0">
+      <div style="text-align:center;max-width:32em;padding:24px"><p>${msg}</p><p style="opacity:.5;font-size:13px">You can close this tab.</p></div>`;
+    try {
+      await google.finishAuth(url.searchParams.get('code'), url.searchParams.get('state'));
+      console.log('[google] connected');
+      orb.say('[Google has just been connected — say so in one short sentence, then carry on.]');
+      res.writeHead(200, { 'content-type': 'text/html' }).end(page('Google is connected. Mark can make you documents now.'));
+    } catch (e) {
+      res.writeHead(400, { 'content-type': 'text/html' }).end(page('That did not work: ' + e.message));
     }
     return;
   }

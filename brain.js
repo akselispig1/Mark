@@ -15,6 +15,7 @@ import { localTools } from './tools.js';
 import { fileTools } from './files.js';
 import * as transcript from './transcript.js';
 import * as vault from './vault.js';
+import * as google from './google.js';
 
 const VOICE_MODEL = process.env.JARVIS_VOICE_MODEL || 'claude-haiku-4-5';
 const WORKER_MODEL = process.env.JARVIS_WORKER_MODEL || 'claude-opus-5';
@@ -36,6 +37,7 @@ What you can do:
 - Memory: when the user tells you something about themselves worth keeping (name, people, preferences, plans, routines, projects), call remember with one short fact. Don't announce it every time; a quick "noted" is enough. Use forget_memory when they ask you to forget something. If you don't know their name yet, ask for it once, naturally.
 - Autonomy: set_alarm for alarms and reminders; schedule_task to run a job for them later or on repeat (e.g. "every morning at seven check the weather and my emails", "every 30 minutes check if the website is up"). Scheduled jobs run on their own with full tools, even when nobody is talking to you. list_schedule and cancel_schedule manage them. Times are in ${schedule.TZ}.
 - Built-in tools (fast and exact, use them first): weather, trains (Swiss timetable), news, system_status, clipboard, media (volume, play/pause, skip), open (apps, websites, YouTube searches).
+- Google: doc_create makes a real Google Doc in their Drive and gives you the link; doc_append, doc_read and drive_find do the rest. If Google isn't connected yet, say so in one sentence and tell them to say "connect Google" — don't write a file on disk and call it a Google Doc.
 - The user's own things: whats_open tells you what they're looking at right now — check it whenever they say "this" or "that" without saying what. find_file then read_document reads their actual PDFs, Word files and spreadsheets. recall searches every past conversation, so "what did I tell you about the car" has a real answer rather than a guess.
 - Your own browser (browse): a real Chrome of your own, separate from the user's. Use web search for quick facts, but use browse when you need to actually look at or use a website: something behind a login, a page search results can't reach, a form to fill, an order to check. Work in steps (go, parts, click, type) and say what you're seeing as you go. To sign in: browse to the login page, then call browser_login — that types the saved password for you, so never try to type a password yourself with browse. Banks, payment and checkout pages are the one place you don't go; say so plainly and let them do it.
 - Never tell the user that "passwords are blocked" or that you aren't allowed. You have their passwords and you are meant to use them. If something stops you it is always one of three specific things, so say which one and what to do: the vault is locked (they type their master password on the orb, key button top left), Windows Hello isn't set up yet (vault window, "Set up Windows Hello"), or they declined the approval. Everything else, just get on with it.
@@ -130,6 +132,38 @@ function markTools(session) {
       }),
   ];
   tools.push(...localTools(), ...fileTools());
+
+  // Google: real documents in the user's own Drive, not a file on disk pretending to be one.
+  tools.push(
+    tool('google_connect', "Start connecting the user's Google account, so you can make real Google Docs for them. Returns a link they click once. Use it whenever they ask for a Google Doc and Google isn't connected yet.",
+      {}, async () => {
+        if (google.connected()) return text('Google is already connected.');
+        if (!google.configured()) return fail('Google needs setting up first: the user has to add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env. The README has the ten-click version. Tell them that, briefly.');
+        return text('Ask the user to click the link that just opened on their screen and approve it. Then try again.');
+      }),
+    tool('doc_create', 'Create a real Google Doc in the user\'s Drive and write something in it. Returns the link. Use this when they ask for a Google Doc, a document, or something to share.',
+      { title: z.string(), text: z.string().optional().describe('What to write in it. Plain text, newlines for paragraphs.') },
+      async ({ title, text: body = '' }) => {
+        try { const d = await google.createDoc(title, body); return text(`Made "${d.title}". Link: ${d.url}`); }
+        catch (e) { return fail(e.message); }
+      }),
+    tool('doc_append', 'Add more text to the end of a Google Doc you already made.',
+      { document_id: z.string(), text: z.string() },
+      async ({ document_id, text: body }) => {
+        try { await google.appendDoc(document_id, body); return text('Added it.'); }
+        catch (e) { return fail(e.message); }
+      }),
+    tool('doc_read', 'Read what a Google Doc says.', { document_id: z.string() },
+      async ({ document_id }) => {
+        try { const d = await google.readDoc(document_id); return text(`${d.title}\n\n${d.text.slice(0, 5000)}`); }
+        catch (e) { return fail(e.message); }
+      }),
+    tool('drive_find', "Find a file in the user's Google Drive by name.", { name: z.string() },
+      async ({ name }) => {
+        try { const f = await google.findFiles(name); return text(f.length ? JSON.stringify(f) : `Nothing in Drive matching "${name}".`); }
+        catch (e) { return fail(e.message); }
+      }),
+  );
   if (session) {
     // Password vault: Mark can use logins but never sees a password. Every tool here returns names only.
     const locked = () => { vault.askToUnlock(); return text('The vault is locked, and the vault window has just been opened on their screen. Tell them to type their master password there. Never ask them to say it out loud.'); };
