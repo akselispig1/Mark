@@ -13,10 +13,13 @@ const T = {
   MATCH: 0.58,        // how alike two voiceprints must be (you ≈ .73-.80, anyone else ≈ .10-.20)
   MIN_SEC: 0.75,      // shorter than this and there isn't enough voice to judge
   MAX_SEC: 4,         // longer than this and we just use the most recent part
+  ENSEMBLE_SEC: 1.6,  // long enough to split in two and average, which steadies the reading
   GRACE_MS: 8000,     // after you're recognised, short follow-ups ("yes", "stop") are taken as yours
-  SILENCE: 0.006,     // below this is background noise, trimmed off the ends
+  SILENCE: 0.006,     // never trim quieter than this, whatever the room sounds like
+  NOISE_MARGIN: 2.5,  // how far above this clip's own quiet stretches counts as "someone talking"
   LEARN_AT: 0.62,     // recognised this comfortably? quietly remember this one too
   LEARN_EVERY: 60000, // but at most once a minute, so one chatty hour can't swamp the profile
+  LEARN_TOPK: 2,      // judge against your best couple of learned samples, not just the luckiest one
   OUTLIER: 0.42,      // a setup recording this unlike the others was a cough, a shout or someone else
 };
 
@@ -80,24 +83,52 @@ function recent(ms) {
 /** Cut the quiet bits off both ends, so pauses don't dilute the voiceprint. */
 function trim(samples) {
   const win = 320;                                        // 20 ms
-  const loud = [];
+  const rms = [];
   for (let i = 0; i + win <= samples.length; i += win) {
     let sum = 0;
     for (let j = i; j < i + win; j++) sum += samples[j] * samples[j];
-    loud.push(Math.sqrt(sum / win) > T.SILENCE);
+    rms.push(Math.sqrt(sum / win));
   }
+  if (!rms.length) return new Float32Array(0);
+  // A fan, traffic or the fridge sets a different floor in every room, so judge "quiet" against
+  // this clip's own quietest fifth rather than one number that's wrong everywhere but a lab.
+  const floor = [...rms].sort((a, b) => a - b)[Math.floor(rms.length * 0.2)] || 0;
+  const cutoff = Math.max(T.SILENCE, floor * T.NOISE_MARGIN);
+  const loud = rms.map((v) => v > cutoff);
   let a = loud.indexOf(true), b = loud.lastIndexOf(true);
   if (a < 0) return new Float32Array(0);
   return samples.subarray(Math.max(0, (a - 2) * win), Math.min(samples.length, (b + 3) * win));
+}
+
+/** A unit-length embedding, averaged from two overlapping halves when there's enough audio to
+ *  spare. A cough or a door slamming in one half then gets outvoted instead of poisoning the
+ *  whole reading, so a genuine sentence reads more steadily than a single embedding of it would. */
+async function embedOf(samples) {
+  if (samples.length < SR16 * T.ENSEMBLE_SEC) {
+    const r = await ask({ type: 'embed', samples: Float32Array.from(samples) });
+    if (!r.ok) throw new Error(r.error);
+    return r.embedding;
+  }
+  const half = Math.floor(samples.length / 2);
+  const overlap = Math.floor(samples.length * 0.15);
+  const [ra, rb] = await Promise.all([
+    ask({ type: 'embed', samples: Float32Array.from(samples.subarray(0, half + overlap)) }),
+    ask({ type: 'embed', samples: Float32Array.from(samples.subarray(half - overlap)) }),
+  ]);
+  if (!ra.ok) throw new Error(ra.error);
+  if (!rb.ok) throw new Error(rb.error);
+  const sum = ra.embedding.map((x, i) => x + rb.embedding[i]);
+  let n = 0; for (const x of sum) n += x * x;
+  n = Math.sqrt(n) || 1;
+  return sum.map((x) => x / n);
 }
 
 async function voiceprintOf(ms) {
   const clip = trim(recent(ms));
   if (clip.length < SR16 * T.MIN_SEC) return { short: true, seconds: clip.length / SR16 };
   const use = clip.length > SR16 * T.MAX_SEC ? clip.subarray(clip.length - SR16 * T.MAX_SEC) : clip;
-  const r = await ask({ type: 'embed', samples: Float32Array.from(use) });
-  if (!r.ok) throw new Error(r.error);
-  return { embedding: r.embedding, seconds: use.length / SR16 };
+  const embedding = await embedOf(use);
+  return { embedding, seconds: use.length / SR16 };
 }
 
 /* ---------- the decision ---------- */
@@ -132,8 +163,17 @@ async function check() {
       return { ok: recently, why: recently ? 'short, but you just spoke' : 'too short to recognise' };
     }
     const best = (list) => (list?.length ? Math.max(...list.map((p) => cosine(got.embedding, p))) : -1);
-    const vsCore = best(profile.core);                       // the sit-down recordings: the anchor
-    const score = Math.max(vsCore, best(profile.learned));   // plus everything he's picked up since
+    // The learned pool is judged by its best few, not its single best — one drifted or mislearned
+    // sample in there shouldn't be all an impostor needs to find. The core recordings stay judged
+    // by their single best match: they were made deliberately, so there's nothing to be wary of.
+    const topFew = (list, k) => {
+      if (!list?.length) return -1;
+      const scores = list.map((p) => cosine(got.embedding, p)).sort((a, b) => b - a);
+      const n = Math.min(k, scores.length);
+      return scores.slice(0, n).reduce((s, x) => s + x, 0) / n;
+    };
+    const vsCore = best(profile.core);                              // the sit-down recordings: the anchor
+    const score = Math.max(vsCore, topFew(profile.learned, T.LEARN_TOPK));
     const ok = score >= T.MATCH;
     if (ok) {
       lastPass = Date.now();
