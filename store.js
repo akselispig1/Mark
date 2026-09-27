@@ -18,20 +18,11 @@ const DATA = path.join(ROOT, 'data');
 const STAMP = path.join(DATA, 'version.json');
 const BACKUPS = path.join(DATA, 'backups');
 
-export const VERSION = 2;
+export const VERSION = 1;
 
 /** Keyed by the version they upgrade *to*. Each one must be safe to run twice. */
 const MIGRATIONS = {
-  // Voice checks now pick their embedding method to match how a profile was enrolled (an ensemble
-  // reading is a different ruler to the original single-pass one). Any profile already on disk
-  // predates that distinction, so it's stamped explicitly rather than left to an inferred default.
-  2: ({ DATA, read }) => {
-    const file = path.join(DATA, 'voiceprint.json');
-    const cur = read(file);
-    if (!cur || cur.embedVersion) return;
-    cur.embedVersion = 1;
-    fs.writeFileSync(file, JSON.stringify(cur));
-  },
+  // 2: (data) => { ... },
 };
 
 const read = (f, fallback = null) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return fallback; } };

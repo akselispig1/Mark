@@ -148,10 +148,8 @@ const server = http.createServer(async (req, res) => {
 
   // Your voiceprint: sets of 256 numbers describing your voice, never the audio itself. Used to
   // ignore other people. It is not a password — Windows Hello still guards anything that matters.
-  //   core        — from the sit-down setup. Never changes on its own; the anchor everything is judged against.
-  //   learned     — added quietly whenever he's certain it was you, so he keeps up with colds, new mics and time.
-  //   embedVersion — how `core` was turned into numbers. The client picks the matching method for a
-  //                  live check against it, so this must never be guessed at or defaulted away.
+  //   core    — from the sit-down setup. Never changes on its own; the anchor everything is judged against.
+  //   learned — added quietly whenever he's certain it was you, so he keeps up with colds, new mics and time.
   if (url.pathname === '/voiceprint' || url.pathname === '/voiceprint/learn') {
     const file = path.join(ROOT, 'data', 'voiceprint.json');
     const backup = path.join(ROOT, 'data', 'voiceprint.backup.json');
@@ -189,7 +187,7 @@ const server = http.createServer(async (req, res) => {
       const core = body?.core || body?.prints;                      // `prints` was the old name
       if (!Array.isArray(core) || core.length < 3 || !core.every(okPrint))
         { res.writeHead(400).end(JSON.stringify({ error: 'bad voiceprint' })); return; }
-      write({ core, learned: [], created: Date.now(), updated: Date.now(), samples: core.length, confidence: body.confidence ?? null, embedVersion: body.embedVersion || 1 });
+      write({ core, learned: [], created: Date.now(), updated: Date.now(), samples: core.length, confidence: body.confidence ?? null });
       console.log(`[voiceid] voice learned from ${core.length} recordings`);
       res.end('{}');
       return;
