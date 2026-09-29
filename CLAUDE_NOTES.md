@@ -3,7 +3,30 @@
 This file is kept up to date by the Claude Code session that checks
 [issue #1](https://github.com/akselispig1/Mark/issues/1) every hour and codes against it.
 
-## This run (2026-09-27)
+## Current state (as of 2026-09-29)
+
+- `main` is at `3aa03ff` (Google Docs integration, doc-links in the transcript). No code changes
+  landed since then — recent hourly runs have found no new instructions on issue #1.
+- Two PRs are open and unreviewed, both clean against current `main`:
+  - **#2** — `voiceid: fix trim() over-clipping continuous speech`. Isolated fix: when someone
+    speaks continuously with no pause, the old 20th-percentile "quiet" cutoff could land inside the
+    speech itself and clip ~0.26s off the start/end. Now the adaptive cutoff is only trusted when
+    it's clearly below the clip's typical loudness; otherwise it falls back to the absolute silence
+    floor.
+  - **#3** — `CLAUDE_NOTES: catch the notes up to current main (no code change)`. Superseded in
+    spirit by this update, but left open since it's a real (if now redundant) diff against an older
+    `main`.
+- Working agreement from issue #1 (2026-09-27, still in force): branch and open a PR for anything
+  beyond trivial notes updates, don't push straight to `main`. Any change to `public/voiceid.js`
+  recognition quality needs a before/after number (see "how to verify" below) in the PR, not just a
+  plausible-sounding argument — the ensemble-embedding attempt on `main` cost the owner a lockout
+  once already (history below) precisely because it wasn't measured against his real enrollment.
+- **How to test voice-ID changes without a mic**: from the browser console with Mark running,
+  `fetch('/tts?text=...')` → decode to 16kHz mono via `OfflineAudioContext` → drive
+  `/voiceid-worker.js` directly with `{type:'embed', samples}`. Compare pairwise cosine agreement
+  before/after on several sentences.
+
+## History: the voice-ID ensemble episode (2026-09-27)
 
 **Instruction from issue #1:** "Can you improve the voice sensing and create a better recognition
 and only listen to the voice that has been learnt."
@@ -40,6 +63,14 @@ owner out mid-conversation. Flagged here in case a future instruction wants it r
 AudioWorklet, WebGPU/WASM) with no model files or browser available in this build environment, so it
 could not be exercised live this run — worth a real enrol/recognise pass on a PC with a mic before
 trusting the new thresholds blindly.
+
+**Outcome:** the ensemble-embedding part above was wrong and is no longer on `main`. On real
+hardware it locked the owner out of his own voice (19 of 28 pairs of his own enrollment recordings
+failed to match each other). The owner reverted it himself (`c910575`), replacing the fixed
+`MATCH` threshold with one calibrated per-person from the worst-agreeing pair of the owner's own
+recordings (clamped 0.42–0.62). The top-2 learned-pool change and the adaptive noise floor were
+both kept — only the ensemble embedding was wrong. `public/voiceid.js` today embeds each clip once,
+not as an average of two halves; see the comment above `embedOf()` on `main` for why.
 
 ## How to run Mark locally on Windows
 
